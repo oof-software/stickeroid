@@ -18,3 +18,7 @@ Python script to convert stuff into WhatsApp stickers
 
 Make sure `ffmpeg`, `magick`, `anim_dump` and `img2webp` are accessible through
 the `PATH` environment variable.
+
+## Add stickers to WhatsApp
+
+See [github.com/WhatsApp/stickers](https://github.com/WhatsApp/stickers)
