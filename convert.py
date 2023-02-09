@@ -7,6 +7,7 @@ import sys
 import argparse
 import logging as log
 import time
+import math
 import functools
 import urllib.error
 import multiprocessing as mp
@@ -20,6 +21,16 @@ RESIZED_DIR = './resized/'
 STICKER_DIR = './stickers/'
 SVG_DIR = './svg/'
 MAX_THREADS = 16
+
+
+def list_files_in_dir(path: str, ext: str) -> list[str]:
+    '''list all files in directory with extension'''
+    files: list[str] = []
+    for dir_entry in os.scandir(path):
+        assert dir_entry.is_file()
+        assert dir_entry.name.endswith(ext)
+        files.append(dir_entry.name)
+    return files
 
 
 class Emote:
@@ -54,15 +65,6 @@ class Emote:
         '''directory for resized frames'''
         return os.path.join(RESIZED_DIR, f'{self.emote_id}/')
 
-    @staticmethod
-    def __list_files_in_dir(path: str, ext: str) -> list[str]:
-        files: list[str] = []
-        for dir_entry in os.scandir(path):
-            assert dir_entry.is_file()
-            assert dir_entry.name.endswith(ext)
-            files.append(dir_entry.name)
-        return files
-
     def frame_count(self) -> int:
         '''how many frames does the animation have'''
         assert self.frame_delays is not None
@@ -73,6 +75,15 @@ class Emote:
         assert self.frame_delays is not None
         return functools.reduce(lambda acc, next: acc + next, self.frame_delays, 0)
 
+    def is_animated(self) -> bool:
+        '''whether the sticker is animated or just an image'''
+        assert self.frame_delays is not None
+        return len(self.frame_delays) > 0
+
+    def emote_size(self) -> int:
+        '''how big the downloaded emote is'''
+        return os.path.getsize(self.__emote_path())
+
     def download(self):
         '''download the emote from 7tv cdn'''
         if not os.path.exists(DOWNLOAD_DIR):
@@ -80,19 +91,23 @@ class Emote:
 
         dst = self.__emote_path()
         if os.path.exists(dst):
-            log.warning('%s skipped download, already exists', self.emote_id)
+            log.warning('%s skipping download, already exists', self.emote_id)
             return
 
         try:
             wget.download(self.__link(), dst, bar=None)
             log.info('%s downloaded', dst)
+            time.sleep(0.5)
         except urllib.error.HTTPError as ex:
             log.error('%s couldn\'t download: %s (%d)',
                       self.emote_id, ex.reason, ex.code)
+            log.error('%s %s', self.emote_id, ex.url)
             raise ex
 
     def extract_frames(self):
         '''extract frames from animated webp file'''
+        assert os.path.exists(self.__emote_path())
+
         if not os.path.exists(FRAME_DIR):
             os.mkdir(FRAME_DIR)
 
@@ -107,30 +122,28 @@ class Emote:
             'anim_dump', '-prefix', '', '-folder', dst, self.__emote_path()
         ], capture_output=True, text=True, check=True)
 
-        log.info('%s extracted %d frames',
-                 self.emote_id, len(self.frame_files_raw))
+        log.info('%s extracted frames', self.emote_id)
 
     def extract_frame_times(self):
         '''read the frame delays'''
-        assert self.emote_file is not None
+        assert os.path.exists(self.__emote_path())
 
         output = subprocess.run([
-            'webpinfo', os.path.join(DOWNLOAD_DIR, self.__file_name())
+            'webpinfo', self.__emote_path()
         ], capture_output=True, text=True, check=True)
 
-        self.frame_delays = [
-            int(d) for d in re.findall(r'^  Duration: (\d+)$',
-                                       output.stdout, flags=re.MULTILINE)
-        ]
+        durations = re.findall(r'^  Duration: (\d+)$',
+                               output.stdout, flags=re.MULTILINE)
+        self.frame_delays = [int(d) for d in durations]
 
-        assert len(self.frame_delays) > 0
-        log.info('%s extracted %d frame times',
-                 self.emote_id, len(self.frame_delays))
+        if len(self.frame_delays) == 0:
+            log.info('%s is an image, no frames extracted', self.emote_id)
+        else:
+            log.info('%s is an animation, extracted frame times', self.emote_id)
 
     def resize_extracted_frames(self):
         '''resize the extracted frames'''
-        assert self.frame_files_raw is not None
-        assert len(self.frame_files_raw) > 0
+        assert os.path.exists(self.__raw_frames_dir())
 
         if not os.path.exists(RESIZED_DIR):
             os.mkdir(RESIZED_DIR)
@@ -138,8 +151,9 @@ class Emote:
         dst = self.__frames_dir()
         if not os.path.exists(dst):
             os.mkdir(dst)
-        elif self.frame_files_raw is not None:
+        else:
             log.warning('%s found existing resized frames', self.emote_id)
+            return
 
         subprocess.run([
             'ffmpeg', '-i', os.path.join(self.__raw_frames_dir(), '%04d.png'),
@@ -147,42 +161,58 @@ class Emote:
                 self.__frames_dir(), '%04d.png')
         ], capture_output=True, text=True, check=True)
 
-        self.frame_files = Emote.__list_files_in_dir(dst, '.png')
-        assert len(self.frame_files) > 0
+        log.info('%s resized extracted frames', self.emote_id)
 
-        log.info('%s resized %d extracted frames',
-                 self.emote_id, len(self.frame_files))
-
-    def build_sticker(self, compression: int, method: int):
+    def build_sticker_animated(self, compression: int, method: int):
         '''
         builds the sticker from the resized frames
         - `compression`: specify the compression factor between 0 and 100.
         - `method`: the trade off between encoding speed and the compressed file size and quality.
           possible values range from 0 to 6.
         '''
-        assert self.frame_files is not None
         assert self.frame_delays is not None
-        assert len(self.frame_files) > 0
-        assert len(self.frame_files) == len(self.frame_delays)
+        assert len(self.frame_delays) > 1
 
         if not os.path.exists(STICKER_DIR):
             os.mkdir(STICKER_DIR)
 
-        dst = os.path.join(STICKER_DIR, self.__file_name())
-        cmd = ['img2webp', '-o', dst, '-loop', '0']
-        for frame_file_name, frame_duration in zip(self.frame_files, self.frame_delays):
-            frame_file_path = os.path.join(
-                self.__frames_dir(), frame_file_name)
-            cmd.extend(['-d', str(frame_duration), '-lossy',
-                        '-q', str(compression), '-m', str(method), frame_file_path])
+        frames = list_files_in_dir(self.__frames_dir(), '.png')
+        assert len(frames) == len(self.frame_delays)
+        frames.sort()
+
+        cmd = ['img2webp', '-o', self.__sticker_path(), '-min_size',
+               '-mixed', '-loop', '0']
+        for frame_file_name, frame_duration in zip(frames, self.frame_delays):
+            cmd.extend(['-d', str(frame_duration), '-q', str(compression), '-m', str(method),
+                        os.path.join(self.__frames_dir(), frame_file_name)])
 
         start = time.perf_counter()
         subprocess.run(cmd, capture_output=True, text=True, check=True)
-        elapsed_ms = (time.perf_counter() - start) * 1000
-        sticker_size = humanize.naturalsize(os.path.getsize(dst), binary=True)
+        elapsed_s = (time.perf_counter() - start)
+        sticker_size = humanize.naturalsize(
+            os.path.getsize(self.__sticker_path()), binary=True)
 
-        log.info('%s built sticker (%d frames, took %.1fms, %s)',
-                 self.emote_id, len(self.frame_delays), elapsed_ms, sticker_size)
+        log.info('%s built animated sticker (%d frames, took %.1fs, %s)',
+                 self.emote_id, len(self.frame_delays), elapsed_s, sticker_size)
+
+    def build_sticker_image(self):
+        '''builds the sticker from an image'''
+        assert self.frame_delays is not None
+        assert len(self.frame_delays) == 0
+
+        if not os.path.exists(STICKER_DIR):
+            os.mkdir(STICKER_DIR)
+
+        subprocess.run([
+            'magick', self.__emote_path(), '-resize', '512x512', '-background', 'none',
+            '-gravity', 'center', '-extent', '512x512',
+            '-define', 'webp:lossless=true', self.__sticker_path()
+        ], capture_output=True, check=True, text=True)
+        sticker_size = humanize.naturalsize(
+            os.path.getsize(self.__sticker_path()), binary=True)
+
+        log.info('%s converted emote to sticker (%s)',
+                 self.emote_id, sticker_size)
 
 
 class Svg:
@@ -210,7 +240,7 @@ class Svg:
             '-define', 'webp:lossless=true', self.__sticker_path()
         ], capture_output=True, check=True, text=True)
         sticker_size = humanize.naturalsize(
-            os.path.getsize(self.__sticker_path()))
+            os.path.getsize(self.__sticker_path()), binary=True)
 
         log.info('%s converted svg to sticker (%s)',
                  self.file_name, sticker_size)
@@ -268,15 +298,35 @@ def check_dependencies():
     check_image_magick()
 
 
-def process_emote(emote: Emote):
+def process_emote(emote: Emote, force: bool):
     '''process emote'''
     try:
         log.basicConfig(encoding='utf-8', level=log.INFO)
         emote.download()
         emote.extract_frame_times()
-        emote.extract_frames()
-        emote.resize_extracted_frames()
-        emote.build_sticker(50, 6)
+
+        if emote.emote_size() > 400 * 1024:
+            log.warning('%s is huge (%s)', emote.emote_id,
+                        humanize.naturalsize(emote.emote_size(), binary=True))
+            if not force:
+                return
+        if emote.frame_count() > 100:
+            log.warning('%s lots of frames (%d)',
+                        emote.emote_id, emote.frame_count())
+            if not force:
+                return
+        if emote.duration_ms() > 10000:
+            log.warning('%s longer than 10s (%ds)', emote.emote_id,
+                        math.floor(emote.duration_ms() * 1e-3))
+            if not force:
+                return
+
+        if emote.is_animated():
+            emote.extract_frames()
+            emote.resize_extracted_frames()
+            emote.build_sticker_animated(50, 6)
+        else:
+            emote.build_sticker_image()
     except urllib.error.HTTPError:
         return
 
@@ -296,6 +346,8 @@ if __name__ == '__main__':
         prog='converter',
         description='Convert 7TV emotes and SVG files to WhatsApp stickers')
 
+    parser.add_argument('--force', action='store_true',
+                        help='process emotes that are long/huge')
     parser.add_argument('--test', action='store_true',
                         help='don\'t process anything, just parse the arguments')
     parser.add_argument('--parallel', type=int, choices=range(1, MAX_THREADS + 1),
@@ -326,7 +378,7 @@ if __name__ == '__main__':
                 pool.map(process_emote, emotes)
         else:
             for emote_ in emotes:
-                process_emote(emote_)
+                process_emote(emote_, args['force'])
 
     elif args['svg'] is not None:
         for svg_name in args['svg']:
