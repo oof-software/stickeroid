@@ -15,6 +15,8 @@ Python script to convert stuff into WhatsApp stickers
   - [How to compile](https://developers.google.com/speed/webp/docs/compiling)
   - [Download](https://developers.google.com/speed/webp/download)
   - [Tested with](https://storage.googleapis.com/downloads.webmproject.org/releases/webp/libwebp-1.3.0-windows-x64.zip)
+  - [Overview](https://developers.google.com/speed/webp/docs/using)
+  - Useful tools: [vwebp](https://developers.google.com/speed/webp/docs/vwebp), [webpinfo](https://developers.google.com/speed/webp/docs/webpinfo), [webpmux](https://developers.google.com/speed/webp/docs/webpmux), [img2webp](https://developers.google.com/speed/webp/docs/img2webp)
 
 Make sure `ffmpeg`, `magick`, `anim_dump` and `img2webp` are accessible through
 the `PATH` environment variable.
