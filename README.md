@@ -11,10 +11,12 @@ Python script to convert stuff into WhatsApp stickers
   - [Download](https://imagemagick.org/script/download.php)
   - [Mirrors](https://imagemagick.org/script/mirror.php)
   - [Tested with](https://mirror.dogado.de/imagemagick/binaries/ImageMagick-7.1.0-61-portable-Q8-x64.zip)
-- `WebP Utilities` (`animdump` and `img2webp`)
+- `WebP Utilities`
   - [How to compile](https://developers.google.com/speed/webp/docs/compiling)
   - [Download](https://developers.google.com/speed/webp/download)
   - [Tested with](https://storage.googleapis.com/downloads.webmproject.org/releases/webp/libwebp-1.3.0-windows-x64.zip)
+  - [Overview](https://developers.google.com/speed/webp/docs/using)
+  - Useful tools: [vwebp](https://developers.google.com/speed/webp/docs/vwebp), [webpinfo](https://developers.google.com/speed/webp/docs/webpinfo), [webpmux](https://developers.google.com/speed/webp/docs/webpmux), [img2webp](https://developers.google.com/speed/webp/docs/img2webp)
 
 Make sure `ffmpeg`, `magick`, `anim_dump` and `img2webp` are accessible through
 the `PATH` environment variable.
@@ -22,3 +24,7 @@ the `PATH` environment variable.
 ## Add stickers to WhatsApp
 
 See [github.com/WhatsApp/stickers](https://github.com/WhatsApp/stickers)
+
+## Change WebP duration
+
+- [github.com/ace9934/webp-duration-changer](https://ace9934.github.io/webp-duration-changer/)

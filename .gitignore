@@ -1,4 +1,10 @@
-/stickers/
+/stickers_anim/
+/stickers_static/
 /resized/
 /frames/
 /emotes/
+/test/
+/*.webp
+/*.svg
+/target
+/.env
