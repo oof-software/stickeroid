@@ -18,6 +18,7 @@ impl ArgExt for Command {
     }
 }
 
+/// Call the binary with the `-version` argument
 fn check_version(binary: &Path) -> Result<String> {
     let output = Command::new(binary).arg("-version").output()?;
     let stdout = String::from_utf8(output.stdout)?;
@@ -95,7 +96,11 @@ impl Ffmpeg {
         quality: u8,
         delay: u32,
     ) -> Result<()> {
-        let video_filter = format!("fps=(1/{delay})*1000,setpts=PTS*({delay}/40)");
+        let video_filter = format!(
+            "\
+            fps=(1/{delay})*1000,\
+            setpts=PTS*({delay}/40)"
+        );
 
         let _ = Command::new(&self.0)
             .arg_pair("-i", input)
@@ -115,12 +120,45 @@ impl Ffmpeg {
 }
 
 #[derive(Debug)]
+pub struct Img2Webp(PathBuf);
+
+impl Img2Webp {
+    pub fn new(str: &str) -> Self {
+        Self(PathBuf::from_str(str).unwrap())
+    }
+    pub fn path(&self) -> &Path {
+        &self.0
+    }
+    pub fn webp_from_images<I, S, T>(&self, input: I, output: S, q: u8, m: u8) -> Result<()>
+    where
+        I: IntoIterator<Item = (T, u32)>,
+        S: AsRef<OsStr>,
+        T: AsRef<OsStr>,
+    {
+        let mut cmd = Command::new(&self.0);
+        cmd.arg_pair("-o", output)
+            .arg_pair("-loop", "0")
+            .arg("-mixed");
+        let q_str = format!("{q}");
+        let m_str = format!("{m}");
+        for (frame_path, duration) in input {
+            cmd.arg_pair("-d", format!("{duration}"))
+                .arg_pair("-q", &q_str)
+                .arg_pair("-m", &m_str)
+                .arg(frame_path);
+        }
+        cmd.output()?;
+        Ok(())
+    }
+}
+
+#[derive(Debug)]
 pub struct Binaries {
     pub anim_dump: AnimDump,
     pub webp_info: WebpInfo,
     pub ffmpeg: Ffmpeg,
     pub magick: PathBuf,
-    pub img_2_webp: PathBuf,
+    pub img_2_webp: Img2Webp,
     pub v_webp: PathBuf,
 }
 
@@ -131,7 +169,7 @@ impl Binaries {
             webp_info: WebpInfo::new(&dotenv::var("WEBP_INFO_BIN")?),
             ffmpeg: Ffmpeg::new(&dotenv::var("FFMPEG_BIN")?),
             magick: PathBuf::from_str(&dotenv::var("MAGICK_BIN")?)?,
-            img_2_webp: PathBuf::from_str(&dotenv::var("IMG2WEBP_BIN")?)?,
+            img_2_webp: Img2Webp::new(&dotenv::var("IMG2WEBP_BIN")?),
             v_webp: PathBuf::from_str(&dotenv::var("VWEBP_BIN")?)?,
         })
     }
@@ -142,7 +180,7 @@ impl Binaries {
             ("webp_info", check_version(self.webp_info.path())?),
             ("ffmpeg", check_version(self.ffmpeg.path())?),
             ("magick", check_version(&self.magick)?),
-            ("img_2_webp", check_version(&self.img_2_webp)?),
+            ("img_2_webp", check_version(self.img_2_webp.path())?),
             ("v_webp", check_version(&self.v_webp)?),
         ]))
     }
