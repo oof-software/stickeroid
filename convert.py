@@ -187,10 +187,9 @@ class Emote:
         self.frame_delays = [int(d) for d in durations]
 
         if len(self.frame_delays) == 0:
-            log.info('%s is an image, no frames extracted', self.emote_id)
+            log.info('%s no frame times extracted', self.emote_id)
         else:
-            log.info(
-                '%s is an animation, extracted frame times', self.emote_id)
+            log.info('%s extracted frame times', self.emote_id)
 
     def resize_extracted_frames(self):
         '''resize the extracted frames'''
@@ -208,8 +207,9 @@ class Emote:
 
         subprocess.run([
             'ffmpeg', '-i', os.path.join(self.__raw_frames_dir(), '%04d.png'),
-            '-vf', 'scale=512:512', '-y', os.path.join(
-                self.__frames_dir(), '%04d.png')
+            '-vf', 'scale=w=512:h=512:force_original_aspect_ratio=decrease,'
+            'pad=512:512:-1:-1:color=0x00000000',
+            '-y', os.path.join(self.__frames_dir(), '%04d.png')
         ], capture_output=True, text=True, check=True)
 
         log.info('%s resized extracted frames', self.emote_id)
