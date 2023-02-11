@@ -27,4 +27,13 @@ See [github.com/WhatsApp/stickers](https://github.com/WhatsApp/stickers)
 
 ## Change WebP duration
 
-- [github.com/ace9934/webp-duration-changer](https://ace9934.github.io/webp-duration-changer/)
+See [github.com/ace9934/webp-duration-changer](https://ace9934.github.io/webp-duration-changer/)
+
+## Environment variables
+
+- `ANIM_DUMP_BIN`: `C:\\[...]\\anim_dump.exe`
+- `WEBP_INFO_BIN`: `C:\\[...]\\webpinfo.exe`
+- `FFMPEG_BIN`: `C:\\[...]\\ffmpeg.exe`
+- `MAGICK_BIN`: `C:\\[...]\\magick.exe`
+- `IMG2WEBP_BIN`: `C:\\[...]\\img2webp.exe`
+- `VWEBP_BIN`: `C:\\[...]\\vwebp.exe`
