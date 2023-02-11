@@ -3,5 +3,8 @@
 /resized/
 /frames/
 /emotes/
+/test/
 /*.webp
 /*.svg
+/target
+/.env
