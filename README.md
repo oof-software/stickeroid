@@ -27,7 +27,7 @@ See [github.com/WhatsApp/stickers](https://github.com/WhatsApp/stickers)
 
 ## Change WebP duration
 
-See [github.com/ace9934/webp-duration-changer](https://ace9934.github.io/webp-duration-changer/)
+See [github.com/ace9934/webp-duration-changer](https://ace9934.github.io/webp-duration-changer/) ([source](https://github.com/ace9934/webp-duration-changer/blob/master/js/webpScript.js))
 
 ## Environment variables
 

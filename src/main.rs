@@ -29,10 +29,4 @@ fn main() {
     } else {
         info!("checked all needed binaries");
     }
-
-    let info = binaries
-        .webp_info
-        .run(r"C:\Users\Rico\Pictures\Emotes\emotes\60aee8087e8706b572cf37f3.webp")
-        .unwrap();
-    println!("{info:?}");
 }
