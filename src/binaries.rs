@@ -93,23 +93,54 @@ impl Ffmpeg {
         &self,
         input: S,
         output: T,
-        quality: u8,
+        q: u8,
+        m: u8,
         delay: u32,
     ) -> Result<()> {
         let video_filter = format!(
-            "\
-            fps=(1/{delay})*1000,\
+            "fps=(1/{delay})*1000,\
             setpts=PTS*({delay}/40)"
         );
 
         let _ = Command::new(&self.0)
             .arg_pair("-i", input)
             .arg_pair("-pix_fmt", "yuva420p")
-            .arg_pair("-compression_level", "4")
+            .arg_pair("-compression_level", format!("{m}"))
             .arg_pair("-loop", "0")
             .arg("-an")
             .arg_pair("-preset", "-1")
-            .arg_pair("-q:v", format!("{quality}"))
+            .arg_pair("-q:v", format!("{q}"))
+            .arg_pair("-vf", video_filter)
+            .arg_pair("-fps_mode", "vfr")
+            .arg("-y")
+            .arg(output)
+            .output()?;
+        Ok(())
+    }
+    pub fn resized_webp_from_images<S: AsRef<OsStr>, T: AsRef<OsStr>>(
+        &self,
+        input: S,
+        output: T,
+        q: u8,
+        m: u8,
+        delay: u32,
+        scale: (u32, u32),
+    ) -> Result<()> {
+        let (width, height) = scale;
+        let video_filter = format!(
+            "fps=(1/{delay})*1000,\
+            setpts=PTS*({delay}/40),\
+            scale=w={width}:h={height}:force_original_aspect_ratio=decrease,\
+            pad=512:512:-1:-1:color=0x00000000"
+        );
+        let _ = Command::new(&self.0)
+            .arg_pair("-i", input)
+            .arg_pair("-pix_fmt", "yuva420p")
+            .arg_pair("-compression_level", format!("{m}"))
+            .arg_pair("-loop", "0")
+            .arg("-an")
+            .arg_pair("-preset", "-1")
+            .arg_pair("-q:v", format!("{q}"))
             .arg_pair("-vf", video_filter)
             .arg_pair("-fps_mode", "vfr")
             .arg("-y")
