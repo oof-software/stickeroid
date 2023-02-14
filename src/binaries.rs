@@ -5,6 +5,8 @@ use std::process::Command;
 use std::str::FromStr;
 
 use anyhow::Result;
+use derive_builder::Builder;
+use log::warn;
 
 use crate::webp_frames::WebpFrames;
 
@@ -62,6 +64,38 @@ impl AnimDump {
     }
 }
 
+#[derive(Debug, Builder)]
+pub struct FfmpegOptions {
+    #[builder(default = "(512, 512)")]
+    scale: (u32, u32),
+    #[builder(default = "75")]
+    quality: u32,
+    #[builder(default = "4")]
+    compression_level: u32,
+    #[builder(default = "-1")]
+    preset: i32,
+    #[builder(default = "30")]
+    delay_ms: u32,
+    #[builder(default = "50")]
+    fps: u32,
+    #[builder(default = "0")]
+    lossless: u32,
+    #[builder(default = "0")]
+    loop_count: u32,
+}
+
+impl FfmpegOptions {
+    pub fn video_filter(&self) -> String {
+        format!(
+            "fps={},\
+            setpts=PTS*({}/40),\
+            scale=w={}:h={}:force_original_aspect_ratio=decrease,\
+            pad=512:512:-1:-1:color=0x00000000",
+            self.fps, self.delay_ms, self.scale.0, self.scale.1
+        )
+    }
+}
+
 #[derive(Debug)]
 pub struct Ffmpeg(PathBuf);
 
@@ -93,56 +127,23 @@ impl Ffmpeg {
         &self,
         input: S,
         output: T,
-        q: u8,
-        m: u8,
-        delay: u32,
+        opt: FfmpegOptions,
     ) -> Result<()> {
-        let video_filter = format!(
-            "fps=(1/{delay})*1000,\
-            setpts=PTS*({delay}/40)"
-        );
+        if opt.fps > (1000 / opt.delay_ms) {
+            warn!("fps too high for given delay");
+        }
 
-        let _ = Command::new(&self.0)
+        let _out = Command::new(&self.0)
             .arg_pair("-i", input)
             .arg_pair("-pix_fmt", "yuva420p")
-            .arg_pair("-compression_level", format!("{m}"))
-            .arg_pair("-loop", "0")
-            .arg("-an")
-            .arg_pair("-preset", "-1")
-            .arg_pair("-q:v", format!("{q}"))
-            .arg_pair("-vf", video_filter)
+            .arg_pair("-compression_level", format!("{}", opt.compression_level))
+            .arg_pair("-preset", format!("{}", opt.preset))
+            .arg_pair("-quality", format!("{}", opt.quality))
+            .arg_pair("-loop", format!("{}", opt.loop_count))
+            .arg_pair("-lossless", format!("{}", opt.lossless))
+            .arg_pair("-vf", opt.video_filter())
             .arg_pair("-fps_mode", "vfr")
-            .arg("-y")
-            .arg(output)
-            .output()?;
-        Ok(())
-    }
-    pub fn resized_webp_from_images<S: AsRef<OsStr>, T: AsRef<OsStr>>(
-        &self,
-        input: S,
-        output: T,
-        q: u8,
-        m: u8,
-        delay: u32,
-        scale: (u32, u32),
-    ) -> Result<()> {
-        let (width, height) = scale;
-        let video_filter = format!(
-            "fps=(1/{delay})*1000,\
-            setpts=PTS*({delay}/40),\
-            scale=w={width}:h={height}:force_original_aspect_ratio=decrease,\
-            pad=512:512:-1:-1:color=0x00000000"
-        );
-        let _ = Command::new(&self.0)
-            .arg_pair("-i", input)
-            .arg_pair("-pix_fmt", "yuva420p")
-            .arg_pair("-compression_level", format!("{m}"))
-            .arg_pair("-loop", "0")
             .arg("-an")
-            .arg_pair("-preset", "-1")
-            .arg_pair("-q:v", format!("{q}"))
-            .arg_pair("-vf", video_filter)
-            .arg_pair("-fps_mode", "vfr")
             .arg("-y")
             .arg(output)
             .output()?;
