@@ -1,4 +1,4 @@
-#[allow(dead_code)]
+#![allow(dead_code)]
 mod binaries;
 mod file_sequence;
 mod logging;
