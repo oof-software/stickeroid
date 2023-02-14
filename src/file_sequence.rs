@@ -14,7 +14,7 @@ fn matches_regex(entry: &DirEntry) -> Option<u32> {
     digits.parse().ok()
 }
 
-/// Collects any file or folder that matches `^(\d+)\.\w{3,4}$`
+/// Collects any file or folder that matches `^(\d+)\.\w{3,4}$` within the given `path`
 /// where the group `(\d+)` denotes the sequence index.
 ///
 /// E.g. `0001.png` or `002.webp`
@@ -27,17 +27,4 @@ pub fn file_sequence<P: AsRef<OsStr>>(path: P) -> Vec<(u32, DirEntry)> {
         .collect::<Vec<_>>();
     buffer.sort_by_key(|e| e.0);
     buffer
-}
-
-#[cfg(test)]
-mod tests {
-    use super::file_sequence;
-
-    #[test]
-    fn it_works() {
-        println!(
-            "{:#?}",
-            file_sequence(r"C:\Users\Rico\Pictures\Emotes\test\d1")
-        );
-    }
 }

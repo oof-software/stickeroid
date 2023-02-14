@@ -8,6 +8,7 @@ use anyhow::Result;
 use derive_builder::Builder;
 use log::warn;
 
+use crate::file_sequence::file_sequence;
 use crate::webp_frames::WebpFrames;
 
 /// Make typing key-value-pair arguments a bit nicer
@@ -55,11 +56,12 @@ impl AnimDump {
         &self.0
     }
     pub fn run<S: AsRef<OsStr>, T: AsRef<OsStr>>(&self, webp: S, dst: T) -> Result<()> {
-        let _ = Command::new(&self.0)
+        Command::new(&self.0)
             .arg_pair("-prefix", "")
             .arg_pair("-folder", dst)
             .arg(webp)
             .output()?;
+
         Ok(())
     }
 }
@@ -115,12 +117,13 @@ impl Ffmpeg {
             pad=512:512:-1:-1:color=0x00000000,\
             scale=w=512:h=512:force_original_aspect_ratio=decrease";
 
-        let _ = Command::new(&self.0)
+        Command::new(&self.0)
             .arg_pair("-i", input)
             .arg_pair("-vf", VIDEO_FILTER)
             .arg("-y")
             .arg(output)
             .output()?;
+
         Ok(())
     }
     pub fn webp_from_images<S: AsRef<OsStr>, T: AsRef<OsStr>>(
@@ -133,7 +136,7 @@ impl Ffmpeg {
             warn!("fps too high for given delay");
         }
 
-        let _out = Command::new(&self.0)
+        Command::new(&self.0)
             .arg_pair("-i", input)
             .arg_pair("-pix_fmt", "yuva420p")
             .arg_pair("-compression_level", format!("{}", opt.compression_level))
@@ -147,6 +150,7 @@ impl Ffmpeg {
             .arg("-y")
             .arg(output)
             .output()?;
+
         Ok(())
     }
 }
@@ -161,7 +165,7 @@ impl Img2Webp {
     pub fn path(&self) -> &Path {
         &self.0
     }
-    pub fn webp_from_images<I, S, T>(&self, input: I, output: S, q: u8, m: u8) -> Result<()>
+    pub fn webp_from_images<I, S, T>(&self, input: I, output: S, q: u32, m: u32) -> Result<()>
     where
         I: IntoIterator<Item = (T, u32)>,
         S: AsRef<OsStr>,
@@ -180,6 +184,60 @@ impl Img2Webp {
                 .arg(frame_path);
         }
         cmd.output()?;
+
+        Ok(())
+    }
+    pub fn webp_from_dir<S, T>(&self, input: S, output: T, q: u32, m: u32, d: u32) -> Result<()>
+    where
+        S: AsRef<OsStr>,
+        T: AsRef<OsStr>,
+    {
+        let sequence = file_sequence(input)
+            .into_iter()
+            .map(|(_, entry)| (entry.into_path(), d))
+            .collect::<Vec<_>>();
+        self.webp_from_images(sequence.into_iter(), output, q, m)
+    }
+}
+
+#[derive(Debug)]
+pub struct Magick(PathBuf);
+
+impl Magick {
+    pub fn new(str: &str) -> Self {
+        Self(PathBuf::from_str(str).unwrap())
+    }
+    pub fn path(&self) -> &Path {
+        &self.0
+    }
+    pub fn render_svg<S: AsRef<OsStr>, T: AsRef<OsStr>>(&self, input: S, output: T) -> Result<()> {
+        Command::new(&self.0)
+            .arg_pair("-size", "512x512")
+            .arg_pair("-background", "none")
+            .arg(input)
+            .arg_pair("-gravity", "center")
+            .arg_pair("-extent", "512x512")
+            .arg_pair("-define", "webp:lossless=true")
+            .arg(output)
+            .output()?;
+
+        Ok(())
+    }
+}
+
+#[derive(Debug)]
+pub struct VWebp(PathBuf);
+
+impl VWebp {
+    pub fn new(str: &str) -> Self {
+        Self(PathBuf::from_str(str).unwrap())
+    }
+    pub fn path(&self) -> &Path {
+        &self.0
+    }
+    pub fn view_webp<S: AsRef<OsStr>>(&self, input: S) -> Result<()> {
+        Command::new(&self.0).arg(input).output()?;
+
         Ok(())
     }
 }
@@ -189,9 +247,9 @@ pub struct Binaries {
     pub anim_dump: AnimDump,
     pub webp_info: WebpInfo,
     pub ffmpeg: Ffmpeg,
-    pub magick: PathBuf,
+    pub magick: Magick,
     pub img_2_webp: Img2Webp,
-    pub v_webp: PathBuf,
+    pub v_webp: VWebp,
 }
 
 impl Binaries {
@@ -200,9 +258,9 @@ impl Binaries {
             anim_dump: AnimDump::new(&dotenv::var("ANIM_DUMP_BIN")?),
             webp_info: WebpInfo::new(&dotenv::var("WEBP_INFO_BIN")?),
             ffmpeg: Ffmpeg::new(&dotenv::var("FFMPEG_BIN")?),
-            magick: PathBuf::from_str(&dotenv::var("MAGICK_BIN")?)?,
+            magick: Magick::new(&dotenv::var("MAGICK_BIN")?),
             img_2_webp: Img2Webp::new(&dotenv::var("IMG2WEBP_BIN")?),
-            v_webp: PathBuf::from_str(&dotenv::var("VWEBP_BIN")?)?,
+            v_webp: VWebp::new(&dotenv::var("VWEBP_BIN")?),
         })
     }
 
@@ -211,9 +269,9 @@ impl Binaries {
             ("anim_dump", check_version(self.anim_dump.path())?),
             ("webp_info", check_version(self.webp_info.path())?),
             ("ffmpeg", check_version(self.ffmpeg.path())?),
-            ("magick", check_version(&self.magick)?),
+            ("magick", check_version(self.magick.path())?),
             ("img_2_webp", check_version(self.img_2_webp.path())?),
-            ("v_webp", check_version(&self.v_webp)?),
+            ("v_webp", check_version(self.v_webp.path())?),
         ]))
     }
 }
