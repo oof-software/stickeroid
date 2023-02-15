@@ -51,7 +51,7 @@ impl WebpInfo {
     pub fn path(&self) -> &Path {
         &self.0
     }
-    pub async fn run<S>(&self, webp: S) -> Result<WebpFrames>
+    pub async fn info<S>(&self, webp: S) -> Result<WebpFrames>
     where
         S: AsRef<OsStr>,
     {
@@ -71,7 +71,7 @@ impl AnimDump {
     pub fn path(&self) -> &Path {
         &self.0
     }
-    pub async fn run<S, T>(&self, webp: S, dst: T) -> Result<()>
+    pub async fn dump_frames<S, T>(&self, webp: S, dst: T) -> Result<()>
     where
         S: AsRef<OsStr>,
         T: AsRef<OsStr>,
