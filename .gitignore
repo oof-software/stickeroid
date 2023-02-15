@@ -8,5 +8,6 @@
 /svg/
 /*.webp
 /*.svg
+/*.txt
 /target
 /.env
