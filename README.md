@@ -37,3 +37,7 @@ See [github.com/ace9934/webp-duration-changer](https://ace9934.github.io/webp-du
 - `MAGICK_BIN`: `C:\[...]\magick.exe`
 - `IMG2WEBP_BIN`: `C:\[...]\img2webp.exe`
 - `VWEBP_BIN`: `C:\[...]\vwebp.exe`
+
+## Tokio feature flags
+
+[tokio/#feature-flags](https://docs.rs/tokio/latest/tokio/#feature-flags)
