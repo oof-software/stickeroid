@@ -4,7 +4,7 @@ use anyhow::Result;
 use bytes::Bytes;
 use futures::StreamExt;
 use lazy_static::lazy_static;
-use log::{info, trace, warn};
+use log::{info, warn};
 use regex::{Regex, RegexBuilder};
 
 const USER_AGENT: &str = "\

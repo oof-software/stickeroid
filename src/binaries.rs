@@ -5,8 +5,7 @@ use std::str::FromStr;
 
 use anyhow::Result;
 use derive_builder::Builder;
-use futures::StreamExt;
-use log::{error, info, trace, warn};
+use log::{error, info, warn};
 use tokio::process::Command;
 
 use crate::file_sequence::file_sequence;

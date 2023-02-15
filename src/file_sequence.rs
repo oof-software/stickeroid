@@ -28,7 +28,7 @@ pub fn file_sequence<P: AsRef<OsStr>>(path: P) -> Vec<(u32, DirEntry)> {
         .collect::<Vec<_>>();
     buffer.sort_by_key(|e| e.0);
 
-    if buffer.len() == 0 {
+    if buffer.is_empty() {
         warn!("no files matched the file_sequence query");
     } else {
         let first = buffer.first().unwrap().0 as usize;
