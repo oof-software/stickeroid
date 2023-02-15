@@ -3,15 +3,20 @@ use std::ffi::OsStr;
 use anyhow::Result;
 use bytes::Bytes;
 use futures::StreamExt;
-use log::{trace, warn};
+use lazy_static::lazy_static;
+use log::{info, trace, warn};
+use regex::{Regex, RegexBuilder};
 
 const USER_AGENT: &str = "\
     Mozilla/5.0 (Windows NT 10.0; Win64; x64) \
     AppleWebKit/537.36 (KHTML, like Gecko) \
     Chrome/110.0.0.0 Safari/537.36";
 
-fn make_url(id: &str) -> String {
+fn make_url_avif(id: &str) -> String {
     format!("https://cdn.7tv.app/emote/{id}/4x.avif")
+}
+fn make_url_webp(id: &str) -> String {
+    format!("https://cdn.7tv.app/emote/{id}/4x.webp")
 }
 
 #[derive(Default, Debug)]
@@ -31,11 +36,30 @@ pub fn client() -> Result<reqwest::Client> {
         .build()?)
 }
 
+pub async fn seven_tv_ids_from_file<P>(path: P) -> Result<Vec<String>>
+where
+    P: AsRef<OsStr>,
+{
+    lazy_static! {
+        static ref ID_RE: Regex = RegexBuilder::new(r"^([a-f0-9]{24})\r?$")
+            .multi_line(true)
+            .build()
+            .unwrap();
+    }
+
+    let data = tokio::fs::read_to_string(path.as_ref()).await?;
+
+    Ok(ID_RE
+        .captures_iter(&data)
+        .map(|c| c.get(1).unwrap().as_str().to_string())
+        .collect::<Vec<_>>())
+}
+
 pub async fn seven_tv_emote(client: &reqwest::Client, id: &str) -> Result<Download> {
-    let data = client.get(make_url(id)).send().await?.bytes().await;
+    let data = client.get(make_url_avif(id)).send().await?.bytes().await;
 
     match &data {
-        Ok(data) => trace!("downloaded 7tv emote `{}` ({})", id, data.len()),
+        Ok(data) => info!("downloaded 7tv emote `{}` ({})", id, data.len()),
         Err(err) => warn!("couldn't download 7tv emote `{id}`: {err}"),
     }
 
@@ -45,14 +69,15 @@ pub async fn seven_tv_emote(client: &reqwest::Client, id: &str) -> Result<Downlo
 pub async fn seven_tv_emotes<'a, I>(
     client: &reqwest::Client,
     ids: I,
-    n: usize,
+    parllel: usize,
 ) -> Vec<Result<Download>>
 where
-    I: IntoIterator<Item = &'a str>,
+    I: IntoIterator,
+    I::Item: AsRef<str> + 'a,
 {
     futures::stream::iter(ids)
-        .map(|id| seven_tv_emote(client, id))
-        .buffer_unordered(n)
+        .map(|id| async move { seven_tv_emote(client, id.as_ref()).await })
+        .buffer_unordered(parllel)
         .collect()
         .await
 }

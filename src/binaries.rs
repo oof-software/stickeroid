@@ -1,30 +1,44 @@
 use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use std::str::FromStr;
 
 use anyhow::Result;
 use derive_builder::Builder;
-use log::warn;
+use futures::StreamExt;
+use log::{error, info, trace, warn};
+use tokio::process::Command;
 
 use crate::file_sequence::file_sequence;
 use crate::webp_frames::WebpFrames;
 
 /// Make typing key-value-pair arguments a bit nicer
 trait ArgExt {
-    fn arg_pair<S: AsRef<OsStr>, T: AsRef<OsStr>>(&mut self, first: S, second: T) -> &mut Self;
+    fn arg_pair<S, T>(&mut self, first: S, second: T) -> &mut Self
+    where
+        S: AsRef<OsStr>,
+        T: AsRef<OsStr>;
 }
 impl ArgExt for Command {
-    fn arg_pair<S: AsRef<OsStr>, T: AsRef<OsStr>>(&mut self, first: S, second: T) -> &mut Self {
+    fn arg_pair<S, T>(&mut self, first: S, second: T) -> &mut Self
+    where
+        S: AsRef<OsStr>,
+        T: AsRef<OsStr>,
+    {
         self.arg(first).arg(second)
     }
 }
 
 /// Call the binary with the `-version` argument
-fn check_version(binary: &Path) -> Result<String> {
-    let output = Command::new(binary).arg("-version").output()?;
-    let stdout = String::from_utf8(output.stdout)?;
+async fn check_version(binary: &Path) -> Result<String> {
+    let output = Command::new(binary).arg("-version").output().await;
+
+    match &output {
+        Ok(_) => info!("found binary `{binary:?}`"),
+        Err(err) => error!("couldn't find binary `{binary:?}`: {err}"),
+    }
+
+    let stdout = String::from_utf8(output?.stdout)?;
     Ok(stdout)
 }
 
@@ -38,8 +52,11 @@ impl WebpInfo {
     pub fn path(&self) -> &Path {
         &self.0
     }
-    pub fn run<S: AsRef<OsStr>>(&self, webp: S) -> Result<WebpFrames> {
-        let output = Command::new(&self.0).arg(webp).output()?;
+    pub async fn run<S>(&self, webp: S) -> Result<WebpFrames>
+    where
+        S: AsRef<OsStr>,
+    {
+        let output = Command::new(&self.0).arg(webp).output().await?;
         let stdout = String::from_utf8(output.stdout)?;
         WebpFrames::from_webp_info(&stdout)
     }
@@ -55,12 +72,17 @@ impl AnimDump {
     pub fn path(&self) -> &Path {
         &self.0
     }
-    pub fn run<S: AsRef<OsStr>, T: AsRef<OsStr>>(&self, webp: S, dst: T) -> Result<()> {
+    pub async fn run<S, T>(&self, webp: S, dst: T) -> Result<()>
+    where
+        S: AsRef<OsStr>,
+        T: AsRef<OsStr>,
+    {
         Command::new(&self.0)
             .arg_pair("-prefix", "")
             .arg_pair("-folder", dst)
             .arg(webp)
-            .output()?;
+            .output()
+            .await?;
 
         Ok(())
     }
@@ -108,11 +130,11 @@ impl Ffmpeg {
     pub fn path(&self) -> &Path {
         &self.0
     }
-    pub fn resize_images<S: AsRef<OsStr>, T: AsRef<OsStr>>(
-        &self,
-        input: S,
-        output: T,
-    ) -> Result<()> {
+    pub async fn resize_images<S, T>(&self, input: S, output: T) -> Result<()>
+    where
+        S: AsRef<OsStr>,
+        T: AsRef<OsStr>,
+    {
         const VIDEO_FILTER: &str = "\
             pad=512:512:-1:-1:color=0x00000000,\
             scale=w=512:h=512:force_original_aspect_ratio=decrease";
@@ -122,16 +144,21 @@ impl Ffmpeg {
             .arg_pair("-vf", VIDEO_FILTER)
             .arg("-y")
             .arg(output)
-            .output()?;
+            .output()
+            .await?;
 
         Ok(())
     }
-    pub fn webp_from_images<S: AsRef<OsStr>, T: AsRef<OsStr>>(
+    pub async fn webp_from_images<S, T>(
         &self,
         input: S,
         output: T,
         opt: FfmpegOptions,
-    ) -> Result<()> {
+    ) -> Result<()>
+    where
+        S: AsRef<OsStr>,
+        T: AsRef<OsStr>,
+    {
         if opt.fps > (1000 / opt.delay_ms) {
             warn!("fps too high for given delay");
         }
@@ -149,7 +176,8 @@ impl Ffmpeg {
             .arg("-an")
             .arg("-y")
             .arg(output)
-            .output()?;
+            .output()
+            .await?;
 
         Ok(())
     }
@@ -165,7 +193,7 @@ impl Img2Webp {
     pub fn path(&self) -> &Path {
         &self.0
     }
-    pub fn webp_from_images<I, S, T>(&self, input: I, output: S, q: u32, m: u32) -> Result<()>
+    pub async fn webp_from_images<I, S, T>(&self, input: I, output: S, q: u32, m: u32) -> Result<()>
     where
         I: IntoIterator<Item = (T, u32)>,
         S: AsRef<OsStr>,
@@ -183,11 +211,18 @@ impl Img2Webp {
                 .arg_pair("-m", &m_str)
                 .arg(frame_path);
         }
-        cmd.output()?;
+        cmd.output().await?;
 
         Ok(())
     }
-    pub fn webp_from_dir<S, T>(&self, input: S, output: T, q: u32, m: u32, d: u32) -> Result<()>
+    pub async fn webp_from_dir<S, T>(
+        &self,
+        input: S,
+        output: T,
+        q: u32,
+        m: u32,
+        d: u32,
+    ) -> Result<()>
     where
         S: AsRef<OsStr>,
         T: AsRef<OsStr>,
@@ -197,6 +232,7 @@ impl Img2Webp {
             .map(|(_, entry)| (entry.into_path(), d))
             .collect::<Vec<_>>();
         self.webp_from_images(sequence.into_iter(), output, q, m)
+            .await
     }
 }
 
@@ -210,7 +246,11 @@ impl Magick {
     pub fn path(&self) -> &Path {
         &self.0
     }
-    pub fn render_svg<S: AsRef<OsStr>, T: AsRef<OsStr>>(&self, input: S, output: T) -> Result<()> {
+    pub async fn render_svg<S, T>(&self, input: S, output: T) -> Result<()>
+    where
+        S: AsRef<OsStr>,
+        T: AsRef<OsStr>,
+    {
         Command::new(&self.0)
             .arg_pair("-size", "512x512")
             .arg_pair("-background", "none")
@@ -219,7 +259,8 @@ impl Magick {
             .arg_pair("-extent", "512x512")
             .arg_pair("-define", "webp:lossless=true")
             .arg(output)
-            .output()?;
+            .output()
+            .await?;
 
         Ok(())
     }
@@ -235,8 +276,11 @@ impl VWebp {
     pub fn path(&self) -> &Path {
         &self.0
     }
-    pub fn view_webp<S: AsRef<OsStr>>(&self, input: S) -> Result<()> {
-        Command::new(&self.0).arg(input).output()?;
+    pub async fn view_webp<S>(&self, input: S) -> Result<()>
+    where
+        S: AsRef<OsStr>,
+    {
+        Command::new(&self.0).arg(input).output().await?;
 
         Ok(())
     }
@@ -264,14 +308,14 @@ impl Binaries {
         })
     }
 
-    pub fn check(&self) -> Result<HashMap<&str, String>> {
+    pub async fn check(&self) -> Result<HashMap<&str, String>> {
         Ok(HashMap::from_iter([
-            ("anim_dump", check_version(self.anim_dump.path())?),
-            ("webp_info", check_version(self.webp_info.path())?),
-            ("ffmpeg", check_version(self.ffmpeg.path())?),
-            ("magick", check_version(self.magick.path())?),
-            ("img_2_webp", check_version(self.img_2_webp.path())?),
-            ("v_webp", check_version(self.v_webp.path())?),
+            ("anim_dump", check_version(self.anim_dump.path()).await?),
+            ("webp_info", check_version(self.webp_info.path()).await?),
+            ("ffmpeg", check_version(self.ffmpeg.path()).await?),
+            ("magick", check_version(self.magick.path()).await?),
+            ("img_2_webp", check_version(self.img_2_webp.path()).await?),
+            ("v_webp", check_version(self.v_webp.path()).await?),
         ]))
     }
 }
