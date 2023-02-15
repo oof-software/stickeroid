@@ -1,6 +1,7 @@
 use std::ffi::OsStr;
 
 use lazy_static::lazy_static;
+use log::warn;
 use regex::Regex;
 use walkdir::{DirEntry, WalkDir};
 
@@ -26,5 +27,16 @@ pub fn file_sequence<P: AsRef<OsStr>>(path: P) -> Vec<(u32, DirEntry)> {
         .filter_map(|entry| Some((matches_regex(&entry)?, entry)))
         .collect::<Vec<_>>();
     buffer.sort_by_key(|e| e.0);
+
+    if buffer.len() == 0 {
+        warn!("no files matched the file_sequence query");
+    } else {
+        let first = buffer.first().unwrap().0 as usize;
+        let last = buffer.last().unwrap().0 as usize;
+        if buffer.len() != last - first + 1 {
+            warn!("numbers in filenames are inconsistent");
+        }
+    }
+
     buffer
 }
