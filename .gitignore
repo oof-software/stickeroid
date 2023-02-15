@@ -1,9 +1,11 @@
 /stickers_anim/
 /stickers_static/
+/stickers/
 /resized/
 /frames/
 /emotes/
 /test/
+/svg/
 /*.webp
 /*.svg
 /target
