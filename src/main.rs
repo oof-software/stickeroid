@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 mod binaries;
+mod bttv;
 mod download;
 mod file_sequence;
 mod logging;
@@ -15,8 +16,7 @@ use structopt::StructOpt;
 
 use crate::seven_tv::{ids_from_file, seven_tv_emotes};
 
-#[tokio::main(flavor = "current_thread")]
-async fn main() {
+async fn main_() {
     logging::init().unwrap();
 
     let _opt = Opt::from_args();
@@ -36,10 +36,32 @@ async fn main() {
         info!("checked all needed binaries");
     }
 
-    let client = seven_tv::client().unwrap();
-    let emotes = ids_from_file("./emotes.txt").await.unwrap();
-    let downloads = seven_tv_emotes(&client, emotes.iter(), 3).await;
-    let successes = downloads.iter().filter(|d| d.is_ok()).count();
+    let client = download::client().unwrap();
 
-    info!("downloaded {} out of {} files", successes, emotes.len());
+    let emotes = ids_from_file("./emotes.txt").await.unwrap();
+    let downloads = seven_tv_emotes(&client, emotes.iter(), 3)
+        .await
+        .into_iter()
+        .filter_map(|d| d.ok())
+        .collect::<Vec<_>>();
+
+    info!(
+        "downloaded {} out of {} files",
+        downloads.len(),
+        emotes.len()
+    );
+
+    std::fs::create_dir("./avif/").unwrap();
+    for file in downloads.iter() {
+        file.save_to_file("./avif/").await.unwrap();
+        info!(
+            "saved `{}` to disk",
+            file.file_name.to_str().unwrap_or_default()
+        );
+    }
+}
+
+#[tokio::main(flavor = "current_thread")]
+async fn main() {
+    main_().await;
 }

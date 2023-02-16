@@ -1,5 +1,7 @@
-use std::ffi::OsStr;
-use std::path::{Path, PathBuf};
+use std::{
+    ffi::OsStr,
+    path::{Path, PathBuf},
+};
 
 use anyhow::Result;
 use futures::StreamExt;
@@ -10,10 +12,10 @@ use regex::{Regex, RegexBuilder};
 use crate::download::{download, Download};
 
 fn make_url_webp(id: &str) -> String {
-    format!("https://cdn.7tv.app/emote/{id}/4x.webp")
+    format!("https://cdn.betterttv.net/emote/{id}/3x.webp")
 }
 fn make_file_name_webp(id: &str) -> PathBuf {
-    Path::new(id).with_extension("webp")
+    Path::new(id).with_extension(".webp")
 }
 
 /// Load a newline-separated list of emote ids from a file
@@ -36,28 +38,28 @@ where
         .collect::<Vec<_>>())
 }
 
-pub async fn seven_tv_emote(client: &reqwest::Client, id: &str) -> Result<Download> {
+pub async fn bttv_emote(client: &reqwest::Client, id: &str) -> Result<Download> {
     let data = download(client, &make_url_webp(id)).await;
 
     match &data {
-        Ok(data) => info!("downloaded 7tv emote `{}` ({})", id, data.len()),
-        Err(err) => warn!("couldn't download 7tv emote `{id}`: {err}"),
+        Ok(data) => info!("downloaded bttv emote `{}` ({})", id, data.len()),
+        Err(err) => warn!("couldn't download bttv emote `{id}`: {err}"),
     }
 
     Ok(Download::new(make_file_name_webp(id), data?))
 }
 
-pub async fn seven_tv_emotes<'a, I>(
+pub async fn bttv_emotes<I>(
     client: &reqwest::Client,
     ids: I,
     parllel: usize,
 ) -> Vec<Result<Download>>
 where
     I: IntoIterator,
-    I::Item: AsRef<str> + 'a,
+    I::Item: AsRef<str>,
 {
     futures::stream::iter(ids)
-        .map(|id| async move { seven_tv_emote(client, id.as_ref()).await })
+        .map(|id| async move { bttv_emote(client, id.as_ref()).await })
         .buffer_unordered(parllel)
         .collect()
         .await

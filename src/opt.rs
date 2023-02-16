@@ -7,6 +7,9 @@ pub struct Opt {
     #[structopt(long = "7tv")]
     pub seven_tv_ids: Vec<String>,
 
+    #[structopt(long = "bttv")]
+    pub bttv_ids: Vec<String>,
+
     /// Names of SVG files to use
     #[structopt(long = "svg")]
     pub svg_names: Vec<String>,
@@ -18,4 +21,8 @@ pub struct Opt {
     /// Only parse arguments, don't process anything
     #[structopt(long)]
     pub test: bool,
+
+    /// Only downloads the listed emotes, don't convert
+    #[structopt(long)]
+    pub download: bool,
 }

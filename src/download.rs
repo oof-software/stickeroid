@@ -1,4 +1,4 @@
-use std::ffi::OsStr;
+use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use bytes::Bytes;
@@ -10,12 +10,19 @@ const USER_AGENT: &str = "\
 
 #[derive(Default, Debug)]
 pub struct Download {
-    pub name: String,
+    pub file_name: PathBuf,
     pub data: Bytes,
 }
 impl Download {
-    pub fn new(name: String, data: Bytes) -> Download {
-        Self { name, data }
+    pub fn new(file_name: PathBuf, data: Bytes) -> Download {
+        Self { file_name, data }
+    }
+    pub async fn save_to_file<P>(&self, path: P) -> Result<()>
+    where
+        P: AsRef<Path>,
+    {
+        let path = path.as_ref().join(&self.file_name);
+        Ok(tokio::fs::write(&path, &self.data).await?)
     }
 }
 
@@ -27,11 +34,4 @@ pub fn client() -> Result<reqwest::Client> {
 
 pub async fn download(client: &reqwest::Client, url: &str) -> Result<Bytes> {
     Ok(client.get(url).send().await?.bytes().await?)
-}
-
-pub async fn save_to_file<P>(bytes: &Bytes, dst: P) -> Result<()>
-where
-    P: AsRef<OsStr>,
-{
-    Ok(tokio::fs::write(dst.as_ref(), bytes).await?)
 }
