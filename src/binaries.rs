@@ -8,7 +8,7 @@ use derive_builder::Builder;
 use log::{error, info, warn};
 use tokio::process::Command;
 
-use crate::file_sequence::file_sequence;
+use crate::file_sequence::file_sequence_blocking;
 use crate::webp_frames::WebpFrames;
 
 /// Make typing key-value-pair arguments a bit nicer
@@ -226,7 +226,7 @@ impl Img2Webp {
         S: AsRef<OsStr>,
         T: AsRef<OsStr>,
     {
-        let sequence = file_sequence(input)
+        let sequence = file_sequence_blocking(input)
             .into_iter()
             .map(|(_, entry)| (entry.into_path(), d))
             .collect::<Vec<_>>();

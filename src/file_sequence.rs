@@ -19,7 +19,7 @@ fn matches_regex(entry: &DirEntry) -> Option<u32> {
 /// where the group `(\d+)` denotes the sequence index.
 ///
 /// E.g. `0001.png` or `002.webp`
-pub fn file_sequence<P: AsRef<OsStr>>(path: P) -> Vec<(u32, DirEntry)> {
+pub fn file_sequence_blocking<P: AsRef<OsStr>>(path: P) -> Vec<(u32, DirEntry)> {
     let walk = WalkDir::new(path.as_ref()).max_depth(1).min_depth(1);
     let mut buffer = walk
         .into_iter()
@@ -39,4 +39,11 @@ pub fn file_sequence<P: AsRef<OsStr>>(path: P) -> Vec<(u32, DirEntry)> {
     }
 
     buffer
+}
+
+pub async fn file_sequence<P: AsRef<OsStr>>(path: P) -> Vec<(u32, DirEntry)> {
+    let path = path.as_ref().to_owned();
+    tokio::task::spawn_blocking(move || file_sequence_blocking(path))
+        .await
+        .unwrap()
 }

@@ -2,12 +2,14 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use bytes::Bytes;
+use log::{info, warn};
 
 const USER_AGENT: &str = "\
     Mozilla/5.0 (Windows NT 10.0; Win64; x64) \
     AppleWebKit/537.36 (KHTML, like Gecko) \
     Chrome/110.0.0.0 Safari/537.36";
 
+/// Call [`Self::new()`]
 #[derive(Default, Debug)]
 pub struct Download {
     pub file_name: PathBuf,
@@ -17,12 +19,19 @@ impl Download {
     pub fn new(file_name: PathBuf, data: Bytes) -> Download {
         Self { file_name, data }
     }
-    pub async fn save_to_file<P>(&self, path: P) -> Result<()>
+    pub async fn save_to_dir<P>(&self, path: P) -> Result<()>
     where
         P: AsRef<Path>,
     {
         let path = path.as_ref().join(&self.file_name);
-        Ok(tokio::fs::write(&path, &self.data).await?)
+        let result = tokio::fs::write(&path, &self.data).await;
+
+        match &result {
+            Ok(_) => info!("wrote `{}`", path.display()),
+            Err(err) => warn!("couldn't write `{}`: {}", path.display(), err),
+        };
+
+        Ok(result?)
     }
 }
 

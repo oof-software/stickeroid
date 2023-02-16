@@ -3,12 +3,14 @@ mod binaries;
 mod bttv;
 mod download;
 mod file_sequence;
+mod list_dir;
 mod logging;
 mod opt;
 mod seven_tv;
 mod webp_frames;
 
 use binaries::Binaries;
+use list_dir::files_with_ext_blocking;
 use opt::Opt;
 
 use log::{error, info};
@@ -39,26 +41,18 @@ async fn main_() {
     let client = download::client().unwrap();
 
     let emotes = ids_from_file("./emotes.txt").await.unwrap();
-    let downloads = seven_tv_emotes(&client, emotes.iter(), 3)
-        .await
+    let downloads = seven_tv_emotes(&client, emotes.iter(), 5).await;
+    let successes = downloads
         .into_iter()
         .filter_map(|d| d.ok())
         .collect::<Vec<_>>();
 
-    info!(
-        "downloaded {} out of {} files",
-        downloads.len(),
-        emotes.len()
-    );
-
     std::fs::create_dir("./avif/").unwrap();
-    for file in downloads.iter() {
-        file.save_to_file("./avif/").await.unwrap();
-        info!(
-            "saved `{}` to disk",
-            file.file_name.to_str().unwrap_or_default()
-        );
+    for file in successes.iter() {
+        file.save_to_dir("./avif/").await.unwrap();
     }
+
+    let emote_files = files_with_ext_blocking("./avif/", "webp");
 }
 
 #[tokio::main(flavor = "current_thread")]
