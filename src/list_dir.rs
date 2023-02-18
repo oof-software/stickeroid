@@ -14,6 +14,9 @@ where
         .map(|ext_| ext_ == ext.as_ref())
         .unwrap_or(false)
 }
+fn is_file(entry: &DirEntry) -> bool {
+    entry.metadata().map_or(false, |meta| meta.is_dir())
+}
 
 /// Collects any file or folder with an extension by
 /// [`Path::extension`](std::path::Path::extension) non recursive.
@@ -25,7 +28,7 @@ where
     let walk = WalkDir::new(path.as_ref()).max_depth(1).min_depth(1);
     let buffer = walk
         .into_iter()
-        .filter_entry(|entry| has_ext(entry, ext.as_ref()))
+        .filter_entry(|entry| has_ext(entry, ext.as_ref()) && is_file(entry))
         .filter_map(|entry| entry.ok())
         .collect::<Vec<_>>();
 
