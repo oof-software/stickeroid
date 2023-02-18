@@ -11,7 +11,6 @@ mod opt;
 mod seven_tv;
 mod webp_frames;
 
-use std::ffi::OsStr;
 use std::path::Path;
 
 use binaries::Binaries;
@@ -56,10 +55,10 @@ where
     if let Err(err) = tokio::fs::create_dir(&dst_dir).await {
         warn!("couldn't create `{}`: {}", dst_dir.as_ref().display(), err);
     }
-    Ok(binaries
+    binaries
         .anim_dump
         .dump_frames(emote.path(), dst_dir.as_ref())
-        .await?)
+        .await
 }
 
 async fn main_() -> Result<()> {
@@ -95,7 +94,7 @@ async fn main_() -> Result<()> {
                     None => return,
                 };
                 let dst_dir = format!("./avif/_{file_name}");
-                match extract_emote_frames(binaries, &emote_file, &dst_dir).await {
+                match extract_emote_frames(binaries, emote_file, &dst_dir).await {
                     Ok(_) => info!("extracted frames to `{dst_dir}`"),
                     Err(err) => info!("couldn't extract frames to `{dst_dir}`: {err}"),
                 };
