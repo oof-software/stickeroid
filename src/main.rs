@@ -11,7 +11,8 @@ mod opt;
 mod seven_tv;
 mod webp_frames;
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::str::FromStr;
 
 use binaries::Binaries;
 use futures::StreamExt;
@@ -91,12 +92,36 @@ async fn main_() -> Result<()> {
             async move {
                 let file_name = match emote_file.file_name().to_str() {
                     Some(v) => v.to_string(),
-                    None => return,
+                    None => {
+                        warn!("invalid file_name `{}`", emote_file.path().display());
+                        return;
+                    }
                 };
-                let dst_dir = format!("./avif/_{file_name}");
+
+                let dst_dir = PathBuf::from_str(&format!("./avif/_{file_name}")).unwrap();
+                if let Ok(meta) = tokio::fs::metadata(&dst_dir).await {
+                    if !meta.is_dir() {
+                        warn!(
+                            "frame directory exists but is not a dir `{}`",
+                            dst_dir.display()
+                        );
+                        return;
+                    } else {
+                        info!(
+                            "frame directory already exists, delete to reextract `{}`",
+                            dst_dir.display()
+                        );
+                        return;
+                    }
+                }
+
                 match extract_emote_frames(binaries, emote_file, &dst_dir).await {
-                    Ok(_) => info!("extracted frames to `{dst_dir}`"),
-                    Err(err) => info!("couldn't extract frames to `{dst_dir}`: {err}"),
+                    Ok(_) => info!("extracted frames to `{}`", dst_dir.display()),
+                    Err(err) => info!(
+                        "couldn't extract frames to `{}`: {}",
+                        dst_dir.display(),
+                        err
+                    ),
                 };
             }
         })
