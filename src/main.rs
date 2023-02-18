@@ -1,5 +1,7 @@
 #![allow(dead_code)]
+
 mod binaries;
+mod binaries_ext;
 mod bttv;
 mod download;
 mod file_sequence;
@@ -9,17 +11,59 @@ mod opt;
 mod seven_tv;
 mod webp_frames;
 
+use std::ffi::OsStr;
+use std::path::Path;
+
 use binaries::Binaries;
-use list_dir::files_with_ext_blocking;
+use futures::StreamExt;
+use list_dir::files_with_ext;
 use opt::Opt;
 
-use log::{error, info};
+use anyhow::Result;
+use log::{error, info, warn};
 use structopt::StructOpt;
+use walkdir::DirEntry;
 
-use crate::seven_tv::{ids_from_file, seven_tv_emotes};
+use crate::seven_tv::seven_tv_emotes;
 
-async fn main_() {
-    logging::init().unwrap();
+async fn download_emotes_to_dir<P>(emotes: &[String], path: P) -> Result<()>
+where
+    P: AsRef<Path>,
+{
+    let client = download::client()?;
+
+    let downloads = seven_tv_emotes(&client, emotes, 5).await;
+    let successes = downloads
+        .into_iter()
+        .filter_map(|d| d.ok())
+        .collect::<Vec<_>>();
+
+    let path_str = path.as_ref().to_str().unwrap_or_default();
+    if let Err(err) = tokio::fs::create_dir(path.as_ref()).await {
+        warn!("couldn't create `{path_str}`: {err}",);
+    }
+
+    for file in successes.iter() {
+        file.save_to_dir(path.as_ref()).await?;
+    }
+    Ok(())
+}
+
+async fn extract_emote_frames<P>(binaries: &Binaries, emote: &DirEntry, dst_dir: P) -> Result<()>
+where
+    P: AsRef<Path>,
+{
+    if let Err(err) = tokio::fs::create_dir(&dst_dir).await {
+        warn!("couldn't create `{}`: {}", dst_dir.as_ref().display(), err);
+    }
+    Ok(binaries
+        .anim_dump
+        .dump_frames(emote.path(), dst_dir.as_ref())
+        .await?)
+}
+
+async fn main_() -> Result<()> {
+    logging::init()?;
 
     let _opt = Opt::from_args();
 
@@ -38,24 +82,33 @@ async fn main_() {
         info!("checked all needed binaries");
     }
 
-    let client = download::client().unwrap();
+    // let emotes = ids_from_file("./ids_7tv.txt").await?;
+    // download_emotes_to_dir(&emotes, "./avif/").await?;
 
-    let emotes = ids_from_file("./emotes.txt").await.unwrap();
-    let downloads = seven_tv_emotes(&client, emotes.iter(), 5).await;
-    let successes = downloads
-        .into_iter()
-        .filter_map(|d| d.ok())
-        .collect::<Vec<_>>();
+    let emote_files = files_with_ext("./avif/", "webp").await;
+    futures::stream::iter(emote_files.iter())
+        .map(|emote_file| {
+            let binaries = &binaries;
+            async move {
+                let file_name = match emote_file.file_name().to_str() {
+                    Some(v) => v.to_string(),
+                    None => return,
+                };
+                let dst_dir = format!("./avif/_{file_name}");
+                match extract_emote_frames(binaries, &emote_file, &dst_dir).await {
+                    Ok(_) => info!("extracted frames to `{dst_dir}`"),
+                    Err(err) => info!("couldn't extract frames to `{dst_dir}`: {err}"),
+                };
+            }
+        })
+        .buffer_unordered(5)
+        .collect::<Vec<()>>()
+        .await;
 
-    std::fs::create_dir("./avif/").unwrap();
-    for file in successes.iter() {
-        file.save_to_dir("./avif/").await.unwrap();
-    }
-
-    let emote_files = files_with_ext_blocking("./avif/", "webp");
+    Ok(())
 }
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
-    main_().await;
+    main_().await.unwrap();
 }

@@ -1,7 +1,4 @@
-use std::{
-    ffi::OsStr,
-    path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use futures::StreamExt;
@@ -21,7 +18,7 @@ fn make_file_name_webp(id: &str) -> PathBuf {
 /// Load a newline-separated list of emote ids from a file
 pub async fn ids_from_file<P>(path: P) -> Result<Vec<String>>
 where
-    P: AsRef<OsStr>,
+    P: AsRef<Path>,
 {
     lazy_static! {
         static ref ID_RE: Regex = RegexBuilder::new(r"^([a-f0-9]{24})\r?$")
@@ -30,7 +27,7 @@ where
             .unwrap();
     }
 
-    let data = tokio::fs::read_to_string(path.as_ref()).await?;
+    let data = tokio::fs::read_to_string(path).await?;
 
     Ok(ID_RE
         .captures_iter(&data)

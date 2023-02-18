@@ -1,4 +1,5 @@
 use std::ffi::OsStr;
+use std::path::Path;
 
 use log::warn;
 use walkdir::{DirEntry, WalkDir};
@@ -18,7 +19,7 @@ where
 /// [`Path::extension`](std::path::Path::extension) non recursive.
 pub fn files_with_ext_blocking<P, Q>(path: P, ext: Q) -> Vec<DirEntry>
 where
-    P: AsRef<OsStr>,
+    P: AsRef<Path>,
     Q: AsRef<OsStr>,
 {
     let walk = WalkDir::new(path.as_ref()).max_depth(1).min_depth(1);
@@ -37,7 +38,7 @@ where
 
 pub async fn files_with_ext<P, Q>(path: P, ext: Q) -> Vec<DirEntry>
 where
-    P: AsRef<OsStr>,
+    P: AsRef<Path>,
     Q: AsRef<OsStr>,
 {
     let path = path.as_ref().to_owned();

@@ -51,11 +51,11 @@ impl WebpInfo {
     pub fn path(&self) -> &Path {
         &self.0
     }
-    pub async fn info<S>(&self, webp: S) -> Result<WebpFrames>
+    pub async fn info<P>(&self, webp: P) -> Result<WebpFrames>
     where
-        S: AsRef<OsStr>,
+        P: AsRef<Path>,
     {
-        let output = Command::new(&self.0).arg(webp).output().await?;
+        let output = Command::new(&self.0).arg(webp.as_ref()).output().await?;
         let stdout = String::from_utf8(output.stdout)?;
         WebpFrames::from_webp_info(&stdout)
     }
@@ -71,15 +71,15 @@ impl AnimDump {
     pub fn path(&self) -> &Path {
         &self.0
     }
-    pub async fn dump_frames<S, T>(&self, webp: S, dst: T) -> Result<()>
+    pub async fn dump_frames<P, Q>(&self, webp: P, dst: Q) -> Result<()>
     where
-        S: AsRef<OsStr>,
-        T: AsRef<OsStr>,
+        P: AsRef<Path>,
+        Q: AsRef<Path>,
     {
         Command::new(&self.0)
             .arg_pair("-prefix", "")
-            .arg_pair("-folder", dst)
-            .arg(webp)
+            .arg_pair("-folder", dst.as_ref())
+            .arg(webp.as_ref())
             .output()
             .await?;
 
@@ -129,41 +129,41 @@ impl Ffmpeg {
     pub fn path(&self) -> &Path {
         &self.0
     }
-    pub async fn resize_images<S, T>(&self, input: S, output: T) -> Result<()>
+    pub async fn resize_images<P, Q>(&self, input: P, output: Q) -> Result<()>
     where
-        S: AsRef<OsStr>,
-        T: AsRef<OsStr>,
+        P: AsRef<Path>,
+        Q: AsRef<Path>,
     {
         const VIDEO_FILTER: &str = "\
             pad=512:512:-1:-1:color=0x00000000,\
             scale=w=512:h=512:force_original_aspect_ratio=decrease";
 
         Command::new(&self.0)
-            .arg_pair("-i", input)
+            .arg_pair("-i", input.as_ref())
             .arg_pair("-vf", VIDEO_FILTER)
             .arg("-y")
-            .arg(output)
+            .arg(output.as_ref())
             .output()
             .await?;
 
         Ok(())
     }
-    pub async fn webp_from_images<S, T>(
+    pub async fn webp_from_images<P, Q>(
         &self,
-        input: S,
-        output: T,
+        input: P,
+        output: Q,
         opt: FfmpegOptions,
     ) -> Result<()>
     where
-        S: AsRef<OsStr>,
-        T: AsRef<OsStr>,
+        P: AsRef<Path>,
+        Q: AsRef<Path>,
     {
         if opt.fps > (1000 / opt.delay_ms) {
             warn!("fps too high for given delay");
         }
 
         Command::new(&self.0)
-            .arg_pair("-i", input)
+            .arg_pair("-i", input.as_ref())
             .arg_pair("-pix_fmt", "yuva420p")
             .arg_pair("-compression_level", format!("{}", opt.compression_level))
             .arg_pair("-preset", format!("{}", opt.preset))
@@ -174,7 +174,7 @@ impl Ffmpeg {
             .arg_pair("-fps_mode", "vfr")
             .arg("-an")
             .arg("-y")
-            .arg(output)
+            .arg(output.as_ref())
             .output()
             .await?;
 
@@ -192,14 +192,14 @@ impl Img2Webp {
     pub fn path(&self) -> &Path {
         &self.0
     }
-    pub async fn webp_from_images<I, S, T>(&self, input: I, output: S, q: u32, m: u32) -> Result<()>
+    pub async fn webp_from_images<I, P, Q>(&self, input: I, output: P, q: u32, m: u32) -> Result<()>
     where
-        I: IntoIterator<Item = (T, u32)>,
-        S: AsRef<OsStr>,
-        T: AsRef<OsStr>,
+        I: IntoIterator<Item = (Q, u32)>,
+        P: AsRef<Path>,
+        Q: AsRef<Path>,
     {
         let mut cmd = Command::new(&self.0);
-        cmd.arg_pair("-o", output)
+        cmd.arg_pair("-o", output.as_ref())
             .arg_pair("-loop", "0")
             .arg("-mixed");
         let q_str = format!("{q}");
@@ -208,25 +208,25 @@ impl Img2Webp {
             cmd.arg_pair("-d", format!("{duration}"))
                 .arg_pair("-q", &q_str)
                 .arg_pair("-m", &m_str)
-                .arg(frame_path);
+                .arg(frame_path.as_ref());
         }
         cmd.output().await?;
 
         Ok(())
     }
-    pub async fn webp_from_dir<S, T>(
+    pub async fn webp_from_dir<P, Q>(
         &self,
-        input: S,
-        output: T,
+        input: P,
+        output: Q,
         q: u32,
         m: u32,
         d: u32,
     ) -> Result<()>
     where
-        S: AsRef<OsStr>,
-        T: AsRef<OsStr>,
+        P: AsRef<Path>,
+        Q: AsRef<Path>,
     {
-        let sequence = file_sequence_blocking(input)
+        let sequence = file_sequence_blocking(input.as_ref())
             .into_iter()
             .map(|(_, entry)| (entry.into_path(), d))
             .collect::<Vec<_>>();
@@ -245,19 +245,19 @@ impl Magick {
     pub fn path(&self) -> &Path {
         &self.0
     }
-    pub async fn render_svg<S, T>(&self, input: S, output: T) -> Result<()>
+    pub async fn render_svg<P, Q>(&self, input: P, output: Q) -> Result<()>
     where
-        S: AsRef<OsStr>,
-        T: AsRef<OsStr>,
+        P: AsRef<Path>,
+        Q: AsRef<Path>,
     {
         Command::new(&self.0)
             .arg_pair("-size", "512x512")
             .arg_pair("-background", "none")
-            .arg(input)
+            .arg(input.as_ref())
             .arg_pair("-gravity", "center")
             .arg_pair("-extent", "512x512")
             .arg_pair("-define", "webp:lossless=true")
-            .arg(output)
+            .arg(output.as_ref())
             .output()
             .await?;
 
@@ -275,11 +275,11 @@ impl VWebp {
     pub fn path(&self) -> &Path {
         &self.0
     }
-    pub async fn view_webp<S>(&self, input: S) -> Result<()>
+    pub async fn view_webp<P>(&self, input: P) -> Result<()>
     where
-        S: AsRef<OsStr>,
+        P: AsRef<Path>,
     {
-        Command::new(&self.0).arg(input).output().await?;
+        Command::new(&self.0).arg(input.as_ref()).output().await?;
 
         Ok(())
     }
