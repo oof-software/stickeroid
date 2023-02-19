@@ -1,4 +1,61 @@
+use std::path::PathBuf;
+
 use structopt::StructOpt;
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub enum DirPathParseError {
+    #[error("couldn't create directory: {0}")]
+    Create(std::io::Error),
+    #[error("couldn't fetch metadata: {0}")]
+    Metadata(std::io::Error),
+    #[error("exists, but is not a directory")]
+    InvalidType,
+}
+
+#[derive(Error, Debug)]
+pub enum FilePathParseError {
+    #[error("couldn't fetch metadata: {0}")]
+    NoMetadata(#[from] std::io::Error),
+    #[error("doesn't correspond to a file")]
+    InvalidType,
+}
+
+fn valid_dir_path<P>(src: P) -> Result<PathBuf, DirPathParseError>
+where
+    P: AsRef<str>,
+{
+    let path = PathBuf::from(src.as_ref());
+    match path.metadata() {
+        Ok(meta) => {
+            if !meta.is_dir() {
+                Err(DirPathParseError::InvalidType)
+            } else {
+                Ok(path)
+            }
+        }
+        Err(_) => {
+            if let Err(err) = std::fs::create_dir(&path) {
+                return Err(DirPathParseError::Create(err));
+            } else {
+                Ok(path)
+            }
+        }
+    }
+}
+
+fn valid_file_path<P>(src: P) -> Result<PathBuf, FilePathParseError>
+where
+    P: AsRef<str>,
+{
+    let path = PathBuf::from(src.as_ref());
+    let meta = path.metadata()?;
+    if !meta.is_file() {
+        Err(FilePathParseError::InvalidType)
+    } else {
+        Ok(path)
+    }
+}
 
 #[derive(Debug, StructOpt)]
 #[structopt(name = "convertoid", about = "Convert stuff to WhatsApp stickers.")]
@@ -13,6 +70,12 @@ pub struct Opt {
     /// Names of SVG files to use
     #[structopt(long = "svg")]
     pub svg_names: Vec<String>,
+
+    #[structopt(long = "dl-dir", parse(try_from_str = valid_dir_path))]
+    pub download_dir: PathBuf,
+
+    #[structopt(long = "frames-dir", parse(try_from_str = valid_dir_path))]
+    pub frames_dir: PathBuf,
 
     /// Force processing of emotes that are unlikely to fit
     #[structopt(long)]
