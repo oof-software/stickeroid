@@ -7,8 +7,6 @@ use thiserror::Error;
 pub enum DirPathParseError {
     #[error("couldn't create directory: {0}")]
     Create(std::io::Error),
-    #[error("couldn't fetch metadata: {0}")]
-    Metadata(std::io::Error),
     #[error("exists, but is not a directory")]
     InvalidType,
 }
@@ -64,16 +62,19 @@ pub struct Opt {
     #[structopt(long = "7tv")]
     pub seven_tv_ids: Vec<String>,
 
+    /// IDs of emotes from BTTV to use
     #[structopt(long = "bttv")]
     pub bttv_ids: Vec<String>,
 
-    /// Names of SVG files to use
+    /// Names of SVGs to use
     #[structopt(long = "svg")]
     pub svg_names: Vec<String>,
 
+    /// Where to save downloaded emotes
     #[structopt(long = "dl-dir", parse(try_from_str = valid_dir_path))]
     pub download_dir: PathBuf,
 
+    /// Where to save extracted frames
     #[structopt(long = "frames-dir", parse(try_from_str = valid_dir_path))]
     pub frames_dir: PathBuf,
 
