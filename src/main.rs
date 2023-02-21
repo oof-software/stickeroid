@@ -1,9 +1,10 @@
-#![allow(dead_code)]
+#![allow(dead_code, unreachable_code)]
 
 mod binaries;
 mod binaries_ext;
 mod bttv;
 mod download;
+mod emote_process;
 mod file_sequence;
 mod list_dir;
 mod logging;
@@ -16,6 +17,7 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use binaries::Binaries;
+use emote_process::test_ui;
 use futures::StreamExt;
 use list_dir::files_with_ext;
 use opt::Opt;
@@ -69,19 +71,23 @@ async fn main_() -> Result<()> {
     let _opt = Opt::from_args();
 
     let binaries = match Binaries::from_env() {
-        Ok(val) => val,
+        Ok(val) => {
+            if let Err(err) = val.check(3).await {
+                error!("{}", err.to_string());
+                std::process::exit(1);
+            } else {
+                info!("checked all needed binaries");
+                val
+            }
+        }
         Err(err) => {
             error!("{}", err.to_string());
             std::process::exit(1);
         }
     };
 
-    if let Err(err) = binaries.check(3).await {
-        error!("{}", err.to_string());
-        std::process::exit(1);
-    } else {
-        info!("checked all needed binaries");
-    }
+    test_ui().await.unwrap();
+    std::process::exit(1);
 
     // let emotes = ids_from_file("./ids_7tv.txt").await?;
     // download_emotes_to_dir(&emotes, "./avif/").await?;
