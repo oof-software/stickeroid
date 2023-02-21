@@ -8,6 +8,7 @@ mod file_sequence;
 mod list_dir;
 mod logging;
 mod opt;
+mod pipeline;
 mod seven_tv;
 mod webp_frames;
 
@@ -75,7 +76,7 @@ async fn main_() -> Result<()> {
         }
     };
 
-    if let Err(err) = binaries.check().await {
+    if let Err(err) = binaries.check(3).await {
         error!("{}", err.to_string());
         std::process::exit(1);
     } else {

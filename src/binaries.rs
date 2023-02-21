@@ -5,6 +5,7 @@ use std::str::FromStr;
 
 use anyhow::Result;
 use derive_builder::Builder;
+use futures::StreamExt;
 use log::{error, info, warn};
 use tokio::process::Command;
 
@@ -31,9 +32,10 @@ impl ArgExt for Command {
 /// Call the binary with the `-version` argument
 async fn check_version(binary: &Path) -> Result<String> {
     let output = Command::new(binary).arg("-version").output().await;
+    let name = binary.file_name().unwrap().to_str().unwrap();
 
     match &output {
-        Ok(_) => info!("found binary `{binary:?}`"),
+        Ok(_) => info!("found binary `{name}`"),
         Err(err) => error!("couldn't find binary `{binary:?}`: {err}"),
     }
 
@@ -307,14 +309,33 @@ impl Binaries {
         })
     }
 
-    pub async fn check(&self) -> Result<HashMap<&str, String>> {
-        Ok(HashMap::from_iter([
-            ("anim_dump", check_version(self.anim_dump.path()).await?),
-            ("webp_info", check_version(self.webp_info.path()).await?),
-            ("ffmpeg", check_version(self.ffmpeg.path()).await?),
-            ("magick", check_version(self.magick.path()).await?),
-            ("img_2_webp", check_version(self.img_2_webp.path()).await?),
-            ("v_webp", check_version(self.v_webp.path()).await?),
-        ]))
+    pub async fn check(&self, parallel: usize) -> Result<HashMap<&'static str, String>> {
+        async fn check_inner(name: &'static str, path: &Path) -> Result<(&'static str, String)> {
+            Ok((name, check_version(path).await?))
+        }
+
+        let to_check = [
+            check_inner("anim_dump", self.anim_dump.path()),
+            check_inner("webp_info", self.webp_info.path()),
+            check_inner("ffmpeg", self.ffmpeg.path()),
+            check_inner("magick", self.magick.path()),
+            check_inner("img_2_webp", self.img_2_webp.path()),
+            check_inner("v_webp", self.v_webp.path()),
+        ];
+
+        let mut map = HashMap::with_capacity(to_check.len());
+        let results = futures::stream::iter(to_check)
+            .buffer_unordered(parallel)
+            .collect::<Vec<_>>()
+            .await;
+
+        for result in results {
+            match result {
+                Ok((name, val)) => map.insert(name, val),
+                Err(err) => return Err(err),
+            };
+        }
+
+        Ok(map)
     }
 }
