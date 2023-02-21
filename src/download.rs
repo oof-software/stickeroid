@@ -9,7 +9,6 @@ const USER_AGENT: &str = "\
     AppleWebKit/537.36 (KHTML, like Gecko) \
     Chrome/110.0.0.0 Safari/537.36";
 
-/// Call [`Self::new()`]
 #[derive(Default, Debug)]
 pub struct Download {
     pub file_name: PathBuf,
