@@ -1,5 +1,7 @@
 use std::path::PathBuf;
 
+use lazy_static::lazy_static;
+use regex::{Regex, RegexBuilder};
 use structopt::StructOpt;
 use thiserror::Error;
 
@@ -7,7 +9,7 @@ use thiserror::Error;
 pub enum DirPathParseError {
     #[error("couldn't create directory: {0}")]
     Create(std::io::Error),
-    #[error("exists, but is not a directory")]
+    #[error("doesn't correspond to a directory")]
     InvalidType,
 }
 
@@ -19,11 +21,8 @@ pub enum FilePathParseError {
     InvalidType,
 }
 
-fn valid_dir_path<P>(src: P) -> Result<PathBuf, DirPathParseError>
-where
-    P: AsRef<str>,
-{
-    let path = PathBuf::from(src.as_ref());
+fn parse_dir_path(src: &str) -> Result<PathBuf, DirPathParseError> {
+    let path = PathBuf::from(src);
     match path.metadata() {
         Ok(meta) => {
             if !meta.is_dir() {
@@ -34,7 +33,7 @@ where
         }
         Err(_) => {
             if let Err(err) = std::fs::create_dir(&path) {
-                return Err(DirPathParseError::Create(err));
+                Err(DirPathParseError::Create(err))
             } else {
                 Ok(path)
             }
@@ -42,17 +41,39 @@ where
     }
 }
 
-fn valid_file_path<P>(src: P) -> Result<PathBuf, FilePathParseError>
-where
-    P: AsRef<str>,
-{
-    let path = PathBuf::from(src.as_ref());
+fn parse_file_path(src: &str) -> Result<PathBuf, FilePathParseError> {
+    let path = PathBuf::from(src);
     let meta = path.metadata()?;
     if !meta.is_file() {
         Err(FilePathParseError::InvalidType)
     } else {
         Ok(path)
     }
+}
+
+#[derive(Error, Debug)]
+pub enum IdsParseError {
+    #[error("some ids are invalid")]
+    InvalidIds,
+    #[error("couldn't open file")]
+    InvalidFile,
+    #[error("file contains invalid ids")]
+    InvalidIdsInFile,
+}
+
+fn parse_id_file(src: &str) -> Result<Vec<String>, IdsParseError> {
+    lazy_static! {
+        static ref ID_RE: Regex = RegexBuilder::new(r"^([a-f0-9]{24})\r?$")
+            .multi_line(true)
+            .build()
+            .unwrap();
+    }
+
+    let data = std::fs::read_to_string(src).map_err(|_| IdsParseError::InvalidFile)?;
+    Ok(ID_RE
+        .captures_iter(&data)
+        .map(|c| c.get(1).unwrap().as_str().to_string())
+        .collect::<Vec<_>>())
 }
 
 #[derive(Debug, StructOpt)]
@@ -71,11 +92,13 @@ pub struct Opt {
     pub svg_names: Vec<String>,
 
     /// Where to save downloaded emotes
-    #[structopt(long = "dl-dir", parse(try_from_str = valid_dir_path))]
+    #[structopt(long = "dl-dir", default_value = "./dl/")]
+    #[structopt(parse(try_from_str = parse_dir_path))]
     pub download_dir: PathBuf,
 
     /// Where to save extracted frames
-    #[structopt(long = "frames-dir", parse(try_from_str = valid_dir_path))]
+    #[structopt(long = "frames-dir", default_value = "./frames/")]
+    #[structopt(parse(try_from_str = parse_dir_path))]
     pub frames_dir: PathBuf,
 
     /// Force processing of emotes that are unlikely to fit
