@@ -17,7 +17,7 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use binaries::Binaries;
-use emote_process::test_ui;
+use emote_process::{test_ui, make_ffmpeg_options};
 use futures::StreamExt;
 use list_dir::files_with_ext;
 use opt::Opt;
@@ -86,7 +86,8 @@ async fn main_() -> Result<()> {
         }
     };
 
-    test_ui().await.unwrap();
+    make_ffmpeg_options().await.unwrap();
+
     std::process::exit(1);
 
     // let emotes = ids_from_file("./ids_7tv.txt").await?;

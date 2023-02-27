@@ -110,6 +110,9 @@ pub struct FfmpegOptions {
 }
 
 impl FfmpegOptions {
+    pub fn builder() -> FfmpegOptionsBuilder {
+        FfmpegOptionsBuilder::default()
+    }
     pub fn video_filter(&self) -> String {
         format!(
             "fps={},\
@@ -194,6 +197,9 @@ impl Img2Webp {
     pub fn path(&self) -> &Path {
         &self.0
     }
+    /// # Arguments
+    /// - `q` Compression factor
+    /// - `m` Compression method
     pub async fn webp_from_images<I, P, Q>(&self, input: I, output: P, q: u32, m: u32) -> Result<()>
     where
         I: IntoIterator<Item = (Q, u32)>,
@@ -310,17 +316,17 @@ impl Binaries {
     }
 
     pub async fn check(&self, parallel: usize) -> Result<HashMap<&'static str, String>> {
-        async fn check_inner(name: &'static str, path: &Path) -> Result<(&'static str, String)> {
+        async fn inner(name: &'static str, path: &Path) -> Result<(&'static str, String)> {
             Ok((name, check_version(path).await?))
         }
 
         let to_check = [
-            check_inner("anim_dump", self.anim_dump.path()),
-            check_inner("webp_info", self.webp_info.path()),
-            check_inner("ffmpeg", self.ffmpeg.path()),
-            check_inner("magick", self.magick.path()),
-            check_inner("img_2_webp", self.img_2_webp.path()),
-            check_inner("v_webp", self.v_webp.path()),
+            inner("anim_dump", self.anim_dump.path()),
+            inner("webp_info", self.webp_info.path()),
+            inner("ffmpeg", self.ffmpeg.path()),
+            inner("magick", self.magick.path()),
+            inner("img_2_webp", self.img_2_webp.path()),
+            inner("v_webp", self.v_webp.path()),
         ];
 
         let mut map = HashMap::with_capacity(to_check.len());
