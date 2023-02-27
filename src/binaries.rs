@@ -103,8 +103,8 @@ pub struct FfmpegOptions {
     delay_ms: u32,
     #[builder(default = "50")]
     fps: u32,
-    #[builder(default = "0")]
-    lossless: u32,
+    #[builder(default = "false")]
+    lossless: bool,
     #[builder(default = "0")]
     loop_count: u32,
 }

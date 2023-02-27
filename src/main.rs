@@ -17,7 +17,7 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use binaries::Binaries;
-use emote_process::{test_ui, make_ffmpeg_options};
+use emote_process::Options;
 use futures::StreamExt;
 use list_dir::files_with_ext;
 use opt::Opt;
@@ -86,7 +86,8 @@ async fn main_() -> Result<()> {
         }
     };
 
-    make_ffmpeg_options().await.unwrap();
+    let options = Options::loop_select().await.unwrap();
+    println!("{options:#?}");
 
     std::process::exit(1);
 

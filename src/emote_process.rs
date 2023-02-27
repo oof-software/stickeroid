@@ -1,73 +1,34 @@
-use std::ops::ControlFlow;
-
 use anyhow::Result;
 use dialoguer::theme::ColorfulTheme;
 use dialoguer::{Input, Select};
-use lazy_static::lazy_static;
-use log::info;
-use regex::Regex;
 
-use crate::binaries::FfmpegOptions;
+use crate::binaries::{FfmpegOptions, FfmpegOptionsBuilder};
 type ValidatorResult<T> = std::result::Result<T, &'static str>;
 
-pub fn test_ui_blocking() -> Result<()> {
-    let selections = [
-        "60898a7739b5010444d07e6e",
-        "6088b8f839b5010444d078d4",
-        "6027ea208fbb823604bde323",
-        "59a4ea2865231102cde26e9c",
-        "60b13dfcf8b3f62601c34b9f",
-        "5805580c3d506fea7ee357d6",
-    ];
-
-    let selected_index = Select::with_theme(&ColorfulTheme::default())
-        .with_prompt("Select an emote to process")
-        .default(0)
-        .items(&selections)
-        .report(false)
-        .interact()?;
-    let selected = selections[selected_index];
-
-    info!("Selected `{selected}`");
-
-    Ok(())
-}
-
-pub async fn test_ui() -> Result<()> {
-    tokio::task::spawn_blocking(|| test_ui_blocking())
-        .await
-        .unwrap()
-}
-
 pub enum Options {
-    Scale(i32, i32),
-    Quality(i32),
-    CompressionLevel(i32),
+    Scale(u32, u32),
+    Quality(u32),
+    CompressionLevel(u32),
     Preset(i32),
-    Delay(i32),
-    Fps(i32),
-    Lossless(i32),
-    LoopCount(i32),
+    Delay(u32),
+    Fps(u32),
+    Lossless(bool),
+    LoopCount(u32),
 }
 
 impl Options {
-    fn names() -> Vec<&'static str> {
-        Vec::from_iter([
-            "Scale",
-            "Quality",
-            "Compression Level",
-            "Preset",
-            "Delay",
-            "FPS",
-            "Lossless",
-            "Loop Count",
-        ])
+    fn parse_u32(input: &str, min: i32, max: i32) -> ValidatorResult<i32> {
+        let num = input.parse().map_err(|_| "invalid syntax")?;
+        if num < min || num > max {
+            Err("out of range")
+        } else {
+            Ok(num)
+        }
     }
-
-    fn parse_scale(input: &str) -> ValidatorResult<(i32, i32)> {
+    fn parse_scale(input: &str) -> ValidatorResult<(u32, u32)> {
         let (w_str, h_str) = input.split_once(':').ok_or("invalid syntax")?;
-        let w = w_str.parse::<u32>().map_err(|_| "invalid syntax")? as i32;
-        let h = h_str.parse::<u32>().map_err(|_| "invalid syntax")? as i32;
+        let w = Self::parse_u32(w_str, 64, 512)? as u32;
+        let h = Self::parse_u32(h_str, 64, 512)? as u32;
         Ok((w, h))
     }
 
@@ -82,91 +43,125 @@ impl Options {
         Ok(Self::Scale(w, h))
     }
     async fn select_scale() -> Result<Self> {
-        tokio::task::spawn_blocking(|| Self::select_scale_blocking())
+        tokio::task::spawn_blocking(Self::select_scale_blocking)
             .await
             .unwrap()
     }
-    async fn select_quality() -> Self {
-        unimplemented!()
-    }
-    async fn select_compression_level() -> Self {
-        unimplemented!()
-    }
-    async fn select_preset() -> Self {
-        unimplemented!()
-    }
-    async fn select_delay() -> Self {
-        unimplemented!()
-    }
-    async fn select_fps() -> Self {
-        unimplemented!()
-    }
-    async fn select_lossless() -> Self {
-        unimplemented!()
-    }
-    async fn select_loop_count() -> Self {
-        unimplemented!()
-    }
-
-    fn apply(&self, opt: &mut FfmpegOptions) {
-        match self {
-            Options::Scale(w, h) => todo!(),
-            Options::Quality(q) => todo!(),
-            Options::CompressionLevel(m) => todo!(),
-            Options::Preset(preset) => todo!(),
-            Options::Delay(ms) => todo!(),
-            Options::Fps(fps) => todo!(),
-            Options::Lossless(lossless) => todo!(),
-            Options::LoopCount(loop_count) => todo!(),
-        }
-    }
-    async fn select(opt: &mut FfmpegOptions) -> ControlFlow<()> {
-        unimplemented!()
-    }
-}
-
-pub async fn make_ffmpeg_options() -> Result<FfmpegOptions> {
-    const OPTIONS: [&str; 9] = [
-        "Scale",
-        "Quality",
-        "Compression Level",
-        "Preset",
-        "Delay",
-        "FPS",
-        "Lossless",
-        "Loop Count",
-        "Finish",
-    ];
-
-    pub fn inner_blocking() -> std::io::Result<usize> {
-        Select::with_theme(&ColorfulTheme::default())
-            .with_prompt("Change options for FFmpeg")
-            .default(0)
+    fn select_quality_blocking() -> Result<Self> {
+        let input = Input::with_theme(&ColorfulTheme::default())
+            .with_prompt("Quality")
+            .allow_empty(false)
             .report(false)
-            .items(&OPTIONS)
-            .interact()
+            .validate_with(|input: &String| Self::parse_u32(input, 0, 100).map(|_| ()))
+            .interact()?;
+        let quality = Self::parse_u32(&input, 0, 100).unwrap() as u32;
+        Ok(Self::Quality(quality))
     }
-    pub async fn inner() -> std::io::Result<usize> {
-        tokio::task::spawn_blocking(|| inner_blocking())
+    async fn select_quality() -> Result<Self> {
+        tokio::task::spawn_blocking(Self::select_quality_blocking)
+            .await
+            .unwrap()
+    }
+    fn select_compression_level_blocking() -> Result<Self> {
+        unimplemented!()
+    }
+    async fn select_compression_level() -> Result<Self> {
+        tokio::task::spawn_blocking(Self::select_compression_level_blocking)
+            .await
+            .unwrap()
+    }
+    fn select_preset_blocking() -> Result<Self> {
+        unimplemented!()
+    }
+    async fn select_preset() -> Result<Self> {
+        tokio::task::spawn_blocking(Self::select_preset_blocking)
+            .await
+            .unwrap()
+    }
+    fn select_delay_blocking() -> Result<Self> {
+        unimplemented!()
+    }
+    async fn select_delay() -> Result<Self> {
+        tokio::task::spawn_blocking(Self::select_delay_blocking)
+            .await
+            .unwrap()
+    }
+    fn select_fps_blocking() -> Result<Self> {
+        unimplemented!()
+    }
+    async fn select_fps() -> Result<Self> {
+        tokio::task::spawn_blocking(Self::select_fps_blocking)
+            .await
+            .unwrap()
+    }
+    fn select_lossless_blocking() -> Result<Self> {
+        unimplemented!()
+    }
+    async fn select_lossless() -> Result<Self> {
+        tokio::task::spawn_blocking(Self::select_lossless_blocking)
+            .await
+            .unwrap()
+    }
+    fn select_loop_count_blocking() -> Result<Self> {
+        unimplemented!()
+    }
+    async fn select_loop_count() -> Result<Self> {
+        tokio::task::spawn_blocking(Self::select_loop_count_blocking)
             .await
             .unwrap()
     }
 
-    let mut builder = FfmpegOptions::builder();
-    loop {
-        let selected_index = inner().await?;
-        match selected_index {
-            0 => info!("Changing Scale"),
-            1 => info!("Changing Quality"),
-            2 => info!("Changing Compression Level"),
-            3 => info!("Changing Preset"),
-            4 => info!("Changing Delay"),
-            5 => info!("Changing FPS"),
-            6 => info!("Changing Lossless"),
-            7 => info!("Changing Loop Count"),
-            _ => break,
-        }
+    fn apply(self, opt: &mut FfmpegOptionsBuilder) {
+        match self {
+            Options::Scale(w, h) => opt.scale((w, h)),
+            Options::Quality(q) => opt.quality(q),
+            Options::CompressionLevel(m) => opt.compression_level(m),
+            Options::Preset(preset) => opt.preset(preset),
+            Options::Delay(ms) => opt.delay_ms(ms),
+            Options::Fps(fps) => opt.fps(fps),
+            Options::Lossless(lossless) => opt.lossless(lossless),
+            Options::LoopCount(loop_count) => opt.loop_count(loop_count),
+        };
     }
-    let options = builder.build()?;
-    Ok(options)
+    pub async fn loop_select() -> Result<FfmpegOptions> {
+        const OPTIONS: [&str; 9] = [
+            "Scale",
+            "Quality",
+            "Compression Level",
+            "Preset",
+            "Delay",
+            "FPS",
+            "Lossless",
+            "Loop Count",
+            "Finish",
+        ];
+
+        let mut builder = FfmpegOptions::builder();
+        loop {
+            let index = tokio::task::spawn_blocking(move || {
+                Select::with_theme(&ColorfulTheme::default())
+                    .with_prompt("What do you want to change?")
+                    .default(0)
+                    .report(false)
+                    .items(&OPTIONS)
+                    .interact()
+            })
+            .await?
+            .unwrap();
+
+            let thing = match index {
+                0 /* Scale */ => Self::select_scale().await?,
+                1 /* Quality */ => Self::select_quality().await?,
+                2 /* Compression Level */ => Self::select_compression_level().await?,
+                3 /* Preset */ => Self::select_preset().await?,
+                4 /* Delay */ => Self::select_delay().await?,
+                5 /* FPS */ => Self::select_fps().await?,
+                6 /* Lossless */ => Self::select_lossless().await?,
+                7 /* Loop Count */ => Self::select_loop_count().await?,
+                _ /* Finish */ => break,
+            };
+            thing.apply(&mut builder);
+        }
+        Ok(builder.build()?)
+    }
 }
