@@ -55,11 +55,11 @@ fn parse_file_path(src: &str) -> Result<PathBuf, FilePathParseError> {
 #[derive(Error, Debug)]
 pub enum IdsParseError {
     #[error("some ids are invalid")]
-    InvalidIds,
+    IdInvalid,
     #[error("couldn't open file")]
-    InvalidFile,
+    FileNotFound,
     #[error("file contains invalid ids")]
-    InvalidIdsInFile,
+    FileContentInvalid,
 }
 
 fn parse_id_file(src: &str) -> Result<Vec<String>, IdsParseError> {
@@ -70,7 +70,7 @@ fn parse_id_file(src: &str) -> Result<Vec<String>, IdsParseError> {
             .unwrap();
     }
 
-    let data = std::fs::read_to_string(src).map_err(|_| IdsParseError::InvalidFile)?;
+    let data = std::fs::read_to_string(src).map_err(|_| IdsParseError::FileNotFound)?;
     Ok(ID_RE
         .captures_iter(&data)
         .map(|c| c.get(1).unwrap().as_str().to_string())

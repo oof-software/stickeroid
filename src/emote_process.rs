@@ -2,7 +2,6 @@ use dialoguer::theme::ColorfulTheme;
 use dialoguer::{Input, Select};
 
 use crate::binaries::{FfmpegOptions, FfmpegOptionsBuilder};
-
 type ValidatorResult<T> = std::result::Result<T, &'static str>;
 
 pub enum Options {
@@ -17,11 +16,18 @@ pub enum Options {
 }
 
 impl Options {
+    fn parse_u32(input: &str, min: i32, max: i32) -> ValidatorResult<i32> {
+        let num = input.parse().map_err(|_| "invalid syntax")?;
+        if num < min || num > max {
+            Err("out of range")
+        } else {
+            Ok(num)
+        }
+    }
     fn parse_scale(input: &str) -> ValidatorResult<(i32, i32)> {
+        let parser = Self::parse_in_range(64, 512);
         let (w_str, h_str) = input.split_once(':').ok_or("invalid syntax")?;
-        let w = w_str.parse::<u32>().map_err(|_| "invalid syntax")? as i32;
-        let h = h_str.parse::<u32>().map_err(|_| "invalid syntax")? as i32;
-        Ok((w, h))
+        Ok((parser(w_str)?, parser(h_str)?))
     }
     fn parse_in_range(min: i32, max: i32) -> impl Fn(&str) -> ValidatorResult<i32> {
         move |input: &str| -> ValidatorResult<i32> {
@@ -76,7 +82,13 @@ impl Options {
         .unwrap()
     }
     async fn select_compression_level() -> Self {
-        unimplemented!()
+        tokio::task::spawn_blocking(|| {
+            let parser = Self::parse_in_range(0, 100);
+            let input = Self::prompt_text("Compression Level", |input| parser(input).map(|_| ()));
+            Self::CompressionLevel(parser(&input).unwrap())
+        })
+        .await
+        .unwrap()
     }
     async fn select_preset() -> Self {
         const ITEMS: [&str; 7] = [
