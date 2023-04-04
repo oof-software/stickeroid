@@ -33,6 +33,12 @@ const DL_PATH: &str = "./dl/";
 const FRAMES_PATH: &str = "./frames/";
 const OUT_PATH: &str = "./out/";
 
+// https://github.com/WhatsApp/stickers/blob/main/Android/app/src/main/java/com/example/samplestickerapp/StickerPackValidator.java#L30-L46
+const STATIC_SIZE_LIMIT: usize = 100 * 1024;
+const ANIMATED_SIZE_LIMIT: usize = 500 * 1024;
+const ANIMATED_MIN_FRAME_DURATION_MS: usize = 8;
+const ANIMATED_MAX_TOTAL_DURATION_MS: usize = 10_000;
+
 async fn download_emotes_to_dir<P>(emotes: &[String], path: P) -> Result<()>
 where
     P: AsRef<Path>,

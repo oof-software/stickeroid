@@ -1,13 +1,5 @@
 use anyhow::Result;
-use lazy_static::lazy_static;
-use regex::{Regex, RegexBuilder};
-
-lazy_static! {
-    static ref DURATION_RE: Regex = RegexBuilder::new(r"^  Duration: (\d+)\r?$")
-        .multi_line(true)
-        .build()
-        .unwrap();
-}
+use lazy_regex::lazy_regex;
 
 pub struct WebpFrames {
     pub durations: Vec<u32>,
@@ -16,7 +8,7 @@ pub struct WebpFrames {
 impl WebpFrames {
     pub fn from_webp_info(stdout: &str) -> Result<WebpFrames> {
         let mut durations = Vec::new();
-        for capture in DURATION_RE.captures_iter(stdout) {
+        for capture in lazy_regex!(r"^  Duration: (\d+)\r?"m).captures_iter(stdout) {
             let duration_str = capture.get(1).unwrap().as_str();
             durations.push(duration_str.parse::<u32>()?);
         }

@@ -2,9 +2,8 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use futures::StreamExt;
-use lazy_static::lazy_static;
+use lazy_regex::lazy_regex;
 use log::{info, warn};
-use regex::{Regex, RegexBuilder};
 
 use crate::download::{download, Download};
 
@@ -20,16 +19,9 @@ pub async fn ids_from_file<P>(path: P) -> Result<Vec<String>>
 where
     P: AsRef<Path>,
 {
-    lazy_static! {
-        static ref ID_RE: Regex = RegexBuilder::new(r"^([a-f0-9]{24})\r?$")
-            .multi_line(true)
-            .build()
-            .unwrap();
-    }
-
     let data = tokio::fs::read_to_string(path).await?;
 
-    Ok(ID_RE
+    Ok(lazy_regex!(r"^([a-f0-9]{24})\r?$"m)
         .captures_iter(&data)
         .map(|c| c.get(1).unwrap().as_str().to_string())
         .collect::<Vec<_>>())

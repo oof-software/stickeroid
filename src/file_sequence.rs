@@ -1,17 +1,12 @@
 use std::path::Path;
 
-use lazy_static::lazy_static;
+use lazy_regex::regex_captures;
 use log::warn;
-use regex::Regex;
 use walkdir::{DirEntry, WalkDir};
 
 fn matches_regex(entry: &DirEntry) -> Option<u32> {
-    lazy_static! {
-        static ref SEQUENCE_RE: Regex = Regex::new(r"^(\d+)\.\w{3,4}$").unwrap();
-    }
-
     let file_name = entry.file_name().to_str()?;
-    let digits = SEQUENCE_RE.captures(file_name)?.get(1).unwrap().as_str();
+    let (_, digits) = regex_captures!(r"^(\d+)\.\w{3,4}$", file_name)?;
     digits.parse().ok()
 }
 

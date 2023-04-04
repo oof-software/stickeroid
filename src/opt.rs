@@ -1,7 +1,6 @@
 use std::path::PathBuf;
 
-use lazy_static::lazy_static;
-use regex::{Regex, RegexBuilder};
+use lazy_regex::lazy_regex;
 use structopt::StructOpt;
 use thiserror::Error;
 
@@ -63,15 +62,8 @@ pub enum IdsParseError {
 }
 
 fn parse_id_file(src: &str) -> Result<Vec<String>, IdsParseError> {
-    lazy_static! {
-        static ref ID_RE: Regex = RegexBuilder::new(r"^([a-f0-9]{24})\r?$")
-            .multi_line(true)
-            .build()
-            .unwrap();
-    }
-
     let data = std::fs::read_to_string(src).map_err(|_| IdsParseError::FileNotFound)?;
-    Ok(ID_RE
+    Ok(lazy_regex!(r"^([a-f0-9]{24})\r?$"m)
         .captures_iter(&data)
         .map(|c| c.get(1).unwrap().as_str().to_string())
         .collect::<Vec<_>>())
@@ -108,7 +100,7 @@ pub struct Opt {
 
     /// Only parse arguments, don't process anything
     #[structopt(long)]
-    pub test: bool,
+    pub dry_run: bool,
 
     /// Only downloads the listed emotes, don't convert
     #[structopt(long)]
