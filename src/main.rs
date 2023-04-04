@@ -1,4 +1,4 @@
-#![allow(dead_code, unreachable_code)]
+#![allow(dead_code, unreachable_code, unused_variables)]
 
 mod binaries;
 mod binaries_ext;
@@ -16,8 +16,8 @@ mod webp_frames;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
-use binaries::Binaries;
-use emote_process::{test_ui, make_ffmpeg_options};
+use binaries::{Binaries, FfmpegOptions};
+use emote_process::make_ffmpeg_options;
 use futures::StreamExt;
 use list_dir::files_with_ext;
 use opt::Opt;
@@ -27,7 +27,11 @@ use log::{error, info, warn};
 use structopt::StructOpt;
 use walkdir::DirEntry;
 
-use crate::seven_tv::seven_tv_emotes;
+use crate::seven_tv::{ids_from_file, seven_tv_emotes};
+
+const DL_PATH: &str = "./dl/";
+const FRAMES_PATH: &str = "./frames/";
+const OUT_PATH: &str = "./out/";
 
 async fn download_emotes_to_dir<P>(emotes: &[String], path: P) -> Result<()>
 where
@@ -46,6 +50,7 @@ where
         warn!("couldn't create `{path_str}`: {err}",);
     }
 
+    // TODO: Don't keep all bytes in memory at once
     for file in successes.iter() {
         file.save_to_dir(path.as_ref()).await?;
     }
@@ -63,6 +68,40 @@ where
         .anim_dump
         .dump_frames(emote.path(), dst_dir.as_ref())
         .await
+}
+
+async fn process_emote(binaries: &Binaries, ffmpeg_opts: &FfmpegOptions, emote_file: &DirEntry) {
+    let file_name = emote_file
+        .file_name()
+        .to_str()
+        .expect("not a fucked filename");
+    let id = file_name.split_once('.').unwrap().0;
+    let dst_dir = PathBuf::from_str(&format!("./frames/{id}/")).unwrap();
+
+    if let Ok(meta) = tokio::fs::metadata(&dst_dir).await {
+        if !meta.is_dir() {
+            warn!(
+                "frame directory exists but is not a dir `{}`",
+                dst_dir.display()
+            );
+            return;
+        } else {
+            info!(
+                "frame directory already exists, delete to reextract `{}`",
+                dst_dir.display()
+            );
+            return;
+        }
+    }
+
+    match extract_emote_frames(binaries, emote_file, &dst_dir).await {
+        Ok(_) => info!("extracted frames to `{}`", dst_dir.display()),
+        Err(err) => info!(
+            "couldn't extract frames to `{}`: {}",
+            dst_dir.display(),
+            err
+        ),
+    };
 }
 
 async fn main_() -> Result<()> {
@@ -86,53 +125,20 @@ async fn main_() -> Result<()> {
         }
     };
 
-    make_ffmpeg_options().await.unwrap();
+    let ffmpeg_opts = make_ffmpeg_options().await;
 
-    std::process::exit(1);
+    info!("loading emote ids from `./ids_7tv.txt`");
+    let emotes = ids_from_file("./ids_7tv.txt").await?;
 
-    // let emotes = ids_from_file("./ids_7tv.txt").await?;
-    // download_emotes_to_dir(&emotes, "./avif/").await?;
+    info!("downloading emotes from 7tv");
+    // download_emotes_to_dir(&emotes, "./dl/").await?;
 
-    let emote_files = files_with_ext("./avif/", "webp").await;
+    info!("collecting downloaded emote files");
+    let emote_files = files_with_ext("./dl/", ".webp").await;
+
+    info!("star processing emotes");
     futures::stream::iter(emote_files.iter())
-        .map(|emote_file| {
-            let binaries = &binaries;
-            async move {
-                let file_name = match emote_file.file_name().to_str() {
-                    Some(v) => v.to_string(),
-                    None => {
-                        warn!("invalid file_name `{}`", emote_file.path().display());
-                        return;
-                    }
-                };
-
-                let dst_dir = PathBuf::from_str(&format!("./avif/_{file_name}")).unwrap();
-                if let Ok(meta) = tokio::fs::metadata(&dst_dir).await {
-                    if !meta.is_dir() {
-                        warn!(
-                            "frame directory exists but is not a dir `{}`",
-                            dst_dir.display()
-                        );
-                        return;
-                    } else {
-                        info!(
-                            "frame directory already exists, delete to reextract `{}`",
-                            dst_dir.display()
-                        );
-                        return;
-                    }
-                }
-
-                match extract_emote_frames(binaries, emote_file, &dst_dir).await {
-                    Ok(_) => info!("extracted frames to `{}`", dst_dir.display()),
-                    Err(err) => info!(
-                        "couldn't extract frames to `{}`: {}",
-                        dst_dir.display(),
-                        err
-                    ),
-                };
-            }
-        })
+        .map(|emote_file| process_emote(&binaries, &ffmpeg_opts, emote_file))
         .buffer_unordered(5)
         .collect::<Vec<()>>()
         .await;

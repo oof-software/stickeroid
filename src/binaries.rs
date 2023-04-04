@@ -92,21 +92,21 @@ impl AnimDump {
 #[derive(Debug, Builder)]
 pub struct FfmpegOptions {
     #[builder(default = "(512, 512)")]
-    scale: (u32, u32),
+    pub scale: (i32, i32),
     #[builder(default = "75")]
-    quality: u32,
+    pub quality: i32,
     #[builder(default = "4")]
-    compression_level: u32,
+    pub compression_level: i32,
     #[builder(default = "-1")]
-    preset: i32,
+    pub preset: i32,
     #[builder(default = "30")]
-    delay_ms: u32,
+    pub delay_ms: i32,
     #[builder(default = "50")]
-    fps: u32,
+    pub fps: i32,
     #[builder(default = "0")]
-    lossless: u32,
+    pub lossless: i32,
     #[builder(default = "0")]
-    loop_count: u32,
+    pub loop_count: i32,
 }
 
 impl FfmpegOptions {

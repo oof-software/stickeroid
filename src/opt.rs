@@ -51,6 +51,7 @@ fn parse_file_path(src: &str) -> Result<PathBuf, FilePathParseError> {
     }
 }
 
+#[allow(clippy::enum_variant_names)]
 #[derive(Error, Debug)]
 pub enum IdsParseError {
     #[error("some ids are invalid")]
