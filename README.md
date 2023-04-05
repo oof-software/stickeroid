@@ -18,9 +18,6 @@ Python script to convert stuff into WhatsApp stickers
   - [Overview](https://developers.google.com/speed/webp/docs/using)
   - Useful tools: [vwebp](https://developers.google.com/speed/webp/docs/vwebp), [webpinfo](https://developers.google.com/speed/webp/docs/webpinfo), [webpmux](https://developers.google.com/speed/webp/docs/webpmux), [img2webp](https://developers.google.com/speed/webp/docs/img2webp)
 
-Make sure `ffmpeg`, `magick`, `anim_dump` and `img2webp` are accessible through
-the `PATH` environment variable.
-
 ## Add stickers to WhatsApp
 
 See [github.com/WhatsApp/stickers](https://github.com/WhatsApp/stickers)
@@ -40,4 +37,12 @@ See [github.com/ace9934/webp-duration-changer](https://ace9934.github.io/webp-du
 
 ## Tokio feature flags
 
-[tokio/#feature-flags](https://docs.rs/tokio/latest/tokio/#feature-flags)
+[docs.rs/tokio/latest/tokio/#feature-flags](https://docs.rs/tokio/latest/tokio/#feature-flags)
+
+## Confusion
+
+- Parse list of emote ids to process
+- Check for existing files on disk
+  - If it doesn't exist, download the emote
+- Check for existing frames on disk
+  - If they don't exist, extract the frames

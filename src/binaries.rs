@@ -9,22 +9,15 @@ use futures::StreamExt;
 use log::{error, info, warn};
 use tokio::process::Command;
 
-use crate::file_sequence::file_sequence_blocking;
-use crate::webp_frames::WebpFrames;
+use crate::file_sequence::file_sequence;
+use crate::webp;
 
 /// Make typing key-value-pair arguments a bit nicer
 trait ArgExt {
-    fn arg_pair<S, T>(&mut self, first: S, second: T) -> &mut Self
-    where
-        S: AsRef<OsStr>,
-        T: AsRef<OsStr>;
+    fn arg_pair(&mut self, first: impl AsRef<OsStr>, second: impl AsRef<OsStr>) -> &mut Self;
 }
 impl ArgExt for Command {
-    fn arg_pair<S, T>(&mut self, first: S, second: T) -> &mut Self
-    where
-        S: AsRef<OsStr>,
-        T: AsRef<OsStr>,
-    {
+    fn arg_pair(&mut self, first: impl AsRef<OsStr>, second: impl AsRef<OsStr>) -> &mut Self {
         self.arg(first).arg(second)
     }
 }
@@ -53,13 +46,10 @@ impl WebpInfo {
     pub fn path(&self) -> &Path {
         &self.0
     }
-    pub async fn info<P>(&self, webp: P) -> Result<WebpFrames>
-    where
-        P: AsRef<Path>,
-    {
+    pub async fn info(&self, webp: impl AsRef<Path>) -> Result<webp::WebpInfo> {
         let output = Command::new(&self.0).arg(webp.as_ref()).output().await?;
         let stdout = String::from_utf8(output.stdout)?;
-        WebpFrames::from_webp_info(&stdout)
+        webp::WebpInfo::from_stdout(&stdout, webp.as_ref())
     }
 }
 
@@ -73,11 +63,7 @@ impl AnimDump {
     pub fn path(&self) -> &Path {
         &self.0
     }
-    pub async fn dump_frames<P, Q>(&self, webp: P, dst: Q) -> Result<()>
-    where
-        P: AsRef<Path>,
-        Q: AsRef<Path>,
-    {
+    pub async fn dump_frames(&self, webp: impl AsRef<Path>, dst: impl AsRef<Path>) -> Result<()> {
         Command::new(&self.0)
             .arg_pair("-prefix", "")
             .arg_pair("-folder", dst.as_ref())
@@ -92,24 +78,27 @@ impl AnimDump {
 #[derive(Debug, Builder)]
 pub struct FfmpegOptions {
     #[builder(default = "(512, 512)")]
-    scale: (u32, u32),
+    pub scale: (i32, i32),
     #[builder(default = "75")]
-    quality: u32,
+    pub quality: i32,
     #[builder(default = "4")]
-    compression_level: u32,
+    pub compression_level: i32,
     #[builder(default = "-1")]
-    preset: i32,
+    pub preset: i32,
     #[builder(default = "30")]
-    delay_ms: u32,
+    pub delay_ms: i32,
     #[builder(default = "50")]
-    fps: u32,
+    pub fps: i32,
     #[builder(default = "0")]
-    lossless: u32,
+    pub lossless: i32,
     #[builder(default = "0")]
-    loop_count: u32,
+    pub loop_count: i32,
 }
 
 impl FfmpegOptions {
+    pub fn builder() -> FfmpegOptionsBuilder {
+        FfmpegOptionsBuilder::default()
+    }
     pub fn video_filter(&self) -> String {
         format!(
             "fps={},\
@@ -131,11 +120,11 @@ impl Ffmpeg {
     pub fn path(&self) -> &Path {
         &self.0
     }
-    pub async fn resize_images<P, Q>(&self, input: P, output: Q) -> Result<()>
-    where
-        P: AsRef<Path>,
-        Q: AsRef<Path>,
-    {
+    pub async fn resize_images(
+        &self,
+        input: impl AsRef<Path>,
+        output: impl AsRef<Path>,
+    ) -> Result<()> {
         const VIDEO_FILTER: &str = "\
             pad=512:512:-1:-1:color=0x00000000,\
             scale=w=512:h=512:force_original_aspect_ratio=decrease";
@@ -150,16 +139,12 @@ impl Ffmpeg {
 
         Ok(())
     }
-    pub async fn webp_from_images<P, Q>(
+    pub async fn webp_from_images(
         &self,
-        input: P,
-        output: Q,
+        input: impl AsRef<Path>,
+        output: impl AsRef<Path>,
         opt: FfmpegOptions,
-    ) -> Result<()>
-    where
-        P: AsRef<Path>,
-        Q: AsRef<Path>,
-    {
+    ) -> Result<()> {
         if opt.fps > (1000 / opt.delay_ms) {
             warn!("fps too high for given delay");
         }
@@ -194,6 +179,9 @@ impl Img2Webp {
     pub fn path(&self) -> &Path {
         &self.0
     }
+    /// # Arguments
+    /// - `q` Compression factor
+    /// - `m` Compression method
     pub async fn webp_from_images<I, P, Q>(&self, input: I, output: P, q: u32, m: u32) -> Result<()>
     where
         I: IntoIterator<Item = (Q, u32)>,
@@ -216,23 +204,16 @@ impl Img2Webp {
 
         Ok(())
     }
-    pub async fn webp_from_dir<P, Q>(
+    pub async fn webp_from_dir(
         &self,
-        input: P,
-        output: Q,
+        input: impl AsRef<Path>,
+        output: impl AsRef<Path>,
         q: u32,
         m: u32,
         d: u32,
-    ) -> Result<()>
-    where
-        P: AsRef<Path>,
-        Q: AsRef<Path>,
-    {
-        let sequence = file_sequence_blocking(input.as_ref())
-            .into_iter()
-            .map(|(_, entry)| (entry.into_path(), d))
-            .collect::<Vec<_>>();
-        self.webp_from_images(sequence.into_iter(), output, q, m)
+    ) -> Result<()> {
+        let sequence = file_sequence(input.as_ref()).await?;
+        self.webp_from_images(sequence.into_iter().map(|seq| (seq.path, d)), output, q, m)
             .await
     }
 }
@@ -247,11 +228,11 @@ impl Magick {
     pub fn path(&self) -> &Path {
         &self.0
     }
-    pub async fn render_svg<P, Q>(&self, input: P, output: Q) -> Result<()>
-    where
-        P: AsRef<Path>,
-        Q: AsRef<Path>,
-    {
+    pub async fn render_svg(
+        &self,
+        input: impl AsRef<OsStr>,
+        output: impl AsRef<OsStr>,
+    ) -> Result<()> {
         Command::new(&self.0)
             .arg_pair("-size", "512x512")
             .arg_pair("-background", "none")
@@ -277,13 +258,12 @@ impl VWebp {
     pub fn path(&self) -> &Path {
         &self.0
     }
-    pub async fn view_webp<P>(&self, input: P) -> Result<()>
-    where
-        P: AsRef<Path>,
-    {
-        Command::new(&self.0).arg(input.as_ref()).output().await?;
-
-        Ok(())
+    pub async fn view_webp(&self, input: impl AsRef<OsStr>) -> Result<()> {
+        Ok(Command::new(&self.0)
+            .arg(input.as_ref())
+            .output()
+            .await
+            .map(|_| ())?)
     }
 }
 
@@ -310,17 +290,17 @@ impl Binaries {
     }
 
     pub async fn check(&self, parallel: usize) -> Result<HashMap<&'static str, String>> {
-        async fn check_inner(name: &'static str, path: &Path) -> Result<(&'static str, String)> {
+        async fn inner(name: &'static str, path: &Path) -> Result<(&'static str, String)> {
             Ok((name, check_version(path).await?))
         }
 
         let to_check = [
-            check_inner("anim_dump", self.anim_dump.path()),
-            check_inner("webp_info", self.webp_info.path()),
-            check_inner("ffmpeg", self.ffmpeg.path()),
-            check_inner("magick", self.magick.path()),
-            check_inner("img_2_webp", self.img_2_webp.path()),
-            check_inner("v_webp", self.v_webp.path()),
+            inner("anim_dump", self.anim_dump.path()),
+            inner("webp_info", self.webp_info.path()),
+            inner("ffmpeg", self.ffmpeg.path()),
+            inner("magick", self.magick.path()),
+            inner("img_2_webp", self.img_2_webp.path()),
+            inner("v_webp", self.v_webp.path()),
         ];
 
         let mut map = HashMap::with_capacity(to_check.len());

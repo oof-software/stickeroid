@@ -1,9 +1,10 @@
 use std::path::PathBuf;
 
-use lazy_static::lazy_static;
-use regex::{Regex, RegexBuilder};
+use lazy_regex::lazy_regex;
 use structopt::StructOpt;
 use thiserror::Error;
+
+use crate::emote_ext::{BttvId, EmoteIdExt, SevenTvId};
 
 #[derive(Error, Debug)]
 pub enum DirPathParseError {
@@ -51,26 +52,20 @@ fn parse_file_path(src: &str) -> Result<PathBuf, FilePathParseError> {
     }
 }
 
+#[allow(clippy::enum_variant_names)]
 #[derive(Error, Debug)]
 pub enum IdsParseError {
     #[error("some ids are invalid")]
-    InvalidIds,
+    IdInvalid,
     #[error("couldn't open file")]
-    InvalidFile,
+    FileNotFound,
     #[error("file contains invalid ids")]
-    InvalidIdsInFile,
+    FileContentInvalid,
 }
 
 fn parse_id_file(src: &str) -> Result<Vec<String>, IdsParseError> {
-    lazy_static! {
-        static ref ID_RE: Regex = RegexBuilder::new(r"^([a-f0-9]{24})\r?$")
-            .multi_line(true)
-            .build()
-            .unwrap();
-    }
-
-    let data = std::fs::read_to_string(src).map_err(|_| IdsParseError::InvalidFile)?;
-    Ok(ID_RE
+    let data = std::fs::read_to_string(src).map_err(|_| IdsParseError::FileNotFound)?;
+    Ok(lazy_regex!(r"^([a-f0-9]{24})\r?$"m)
         .captures_iter(&data)
         .map(|c| c.get(1).unwrap().as_str().to_string())
         .collect::<Vec<_>>())
@@ -81,11 +76,13 @@ fn parse_id_file(src: &str) -> Result<Vec<String>, IdsParseError> {
 pub struct Opt {
     /// IDs of emotes from 7TV to use
     #[structopt(long = "7tv")]
-    pub seven_tv_ids: Vec<String>,
+    #[structopt(parse(try_from_str = SevenTvId::parse_id))]
+    pub seven_tv_ids: Vec<SevenTvId>,
 
     /// IDs of emotes from BTTV to use
     #[structopt(long = "bttv")]
-    pub bttv_ids: Vec<String>,
+    #[structopt(parse(try_from_str = BttvId::parse_id))]
+    pub bttv_ids: Vec<BttvId>,
 
     /// Names of SVGs to use
     #[structopt(long = "svg")]
@@ -101,13 +98,23 @@ pub struct Opt {
     #[structopt(parse(try_from_str = parse_dir_path))]
     pub frames_dir: PathBuf,
 
+    /// Where to put converted static stickers
+    #[structopt(long = "out-static-dir", default_value = "./out-static/")]
+    #[structopt(parse(try_from_str = parse_dir_path))]
+    pub out_static_dir: PathBuf,
+
+    /// Where to put converted animated stickers
+    #[structopt(long = "out-anim-dir", default_value = "./out-anim/")]
+    #[structopt(parse(try_from_str = parse_dir_path))]
+    pub out_anim_dir: PathBuf,
+
     /// Force processing of emotes that are unlikely to fit
     #[structopt(long)]
     pub force: bool,
 
     /// Only parse arguments, don't process anything
     #[structopt(long)]
-    pub test: bool,
+    pub dry_run: bool,
 
     /// Only downloads the listed emotes, don't convert
     #[structopt(long)]
