@@ -4,12 +4,12 @@ use log::info;
 use structopt::StructOpt;
 use walkdir::WalkDir;
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use crate::binaries::Binaries;
 use crate::download::Client;
-use crate::emote_ext::{BttvId, EmoteId, SevenTvId};
+use crate::emote_ext::{BttvId, EmoteId, EmoteIdExt, SevenTvId};
 use crate::opt::Opt;
 use crate::webp;
 
@@ -44,7 +44,7 @@ impl Context {
         ids
     }
 
-    async fn download_emote(&self, id: EmoteId) -> Result<()> {
+    pub async fn download_emote(&self, id: EmoteId) -> Result<()> {
         let dl = self.client.get_emote(id).await?;
         dl.write_to(&self.opt.download_dir).await?;
         info!("downloaded emote `{id:?}`");
@@ -54,23 +54,24 @@ impl Context {
         let mut iter = futures::stream::iter(ids)
             .map(|id| self.download_emote(*id))
             .buffer_unordered(5);
-        while let Some(r) = iter.next().await {
-            if let Err(e) = r {
-                return Err(e);
+        while let Some(result) = iter.next().await {
+            if let err @ Err(_) = result {
+                return err;
             }
         }
         Ok(())
     }
 
-    async fn webp_info(&self, path: impl AsRef<Path>) -> Result<webp::WebpInfo> {
-        let info = self.bin.webp_info.info(path.as_ref()).await?;
-        info!("got webp_info for `{}`", path.as_ref().display());
+    pub async fn webp_info(&self, id: EmoteId) -> Result<webp::WebpInfo> {
+        let path = self.opt.download_dir.join(id.to_file_name());
+        let info = self.bin.webp_info.info(&path).await?;
+        info!("got webp_info for emote `{id:?}`");
         Ok(info)
     }
-    pub async fn webp_infos(&self, paths: &[PathBuf]) -> Result<Vec<webp::WebpInfo>> {
-        let mut infos = Vec::with_capacity(paths.len());
-        let mut iter = futures::stream::iter(paths)
-            .map(|path| self.webp_info(path))
+    pub async fn webp_infos(&self, ids: &[EmoteId]) -> Result<Vec<webp::WebpInfo>> {
+        let mut infos = Vec::with_capacity(ids.len());
+        let mut iter = futures::stream::iter(ids)
+            .map(|id| self.webp_info(*id))
             .buffer_unordered(5);
         while let Some(info) = iter.next().await {
             infos.push(info?);
@@ -90,5 +91,39 @@ impl Context {
         })
         .await
         .unwrap()
+    }
+
+    pub async fn extract_frames_single(&self, id: EmoteId) -> Result<()> {
+        let src = self.opt.download_dir.join(id.to_file_name());
+        let dst = self.opt.frames_dir.join(id.to_string());
+        crate::fs::assert_dir(&dst).await?;
+        self.bin.anim_dump.dump_frames(src, dst).await?;
+        info!("extracted frames for emote `{id:?}`");
+        Ok(())
+    }
+
+    pub async fn extract_frames(&self, ids: &[EmoteId]) -> Result<()> {
+        let mut iter = futures::stream::iter(ids)
+            .map(|id| self.extract_frames_single(*id))
+            .buffer_unordered(5);
+        while let Some(result) = iter.next().await {
+            if let err @ Err(_) = result {
+                return err;
+            }
+        }
+        Ok(())
+    }
+
+    // https://github.com/WhatsApp/stickers/blob/main/Android/app/src/main/java/com/example/samplestickerapp/StickerPackValidator.java#L30-L46
+    const STATIC_SIZE_LIMIT: usize = 100 * 1024;
+    const ANIMATED_SIZE_LIMIT: usize = 500 * 1024;
+
+    pub fn partition_infos_valid(
+        infos: &mut [webp::WebpInfo],
+    ) -> (&[webp::WebpInfo], &[webp::WebpInfo]) {
+        let partition_point = infos
+            .iter_mut()
+            .partition_in_place(webp::WebpInfo::is_valid);
+        infos.split_at(partition_point)
     }
 }

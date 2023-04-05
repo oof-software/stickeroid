@@ -98,6 +98,16 @@ pub struct Opt {
     #[structopt(parse(try_from_str = parse_dir_path))]
     pub frames_dir: PathBuf,
 
+    /// Where to put converted static stickers
+    #[structopt(long = "out-static-dir", default_value = "./out-static/")]
+    #[structopt(parse(try_from_str = parse_dir_path))]
+    pub out_static_dir: PathBuf,
+
+    /// Where to put converted animated stickers
+    #[structopt(long = "out-anim-dir", default_value = "./out-anim/")]
+    #[structopt(parse(try_from_str = parse_dir_path))]
+    pub out_anim_dir: PathBuf,
+
     /// Force processing of emotes that are unlikely to fit
     #[structopt(long)]
     pub force: bool,
