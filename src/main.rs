@@ -1,17 +1,14 @@
 #![allow(dead_code, unreachable_code, unused_variables)]
 
 mod binaries;
-mod binaries_ext;
 mod context;
 mod convert;
 mod download;
 mod emote_ext;
 mod file_sequence;
-mod fs;
 mod list_dir;
 mod logging;
 mod opt;
-mod pipeline;
 mod unwrap_ext;
 mod webp;
 
