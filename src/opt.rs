@@ -4,6 +4,8 @@ use lazy_regex::lazy_regex;
 use structopt::StructOpt;
 use thiserror::Error;
 
+use crate::emote_ext::{BttvId, EmoteIdExt, SevenTvId};
+
 #[derive(Error, Debug)]
 pub enum DirPathParseError {
     #[error("couldn't create directory: {0}")]
@@ -74,11 +76,13 @@ fn parse_id_file(src: &str) -> Result<Vec<String>, IdsParseError> {
 pub struct Opt {
     /// IDs of emotes from 7TV to use
     #[structopt(long = "7tv")]
-    pub seven_tv_ids: Vec<String>,
+    #[structopt(parse(try_from_str = SevenTvId::parse_id))]
+    pub seven_tv_ids: Vec<SevenTvId>,
 
     /// IDs of emotes from BTTV to use
     #[structopt(long = "bttv")]
-    pub bttv_ids: Vec<String>,
+    #[structopt(parse(try_from_str = BttvId::parse_id))]
+    pub bttv_ids: Vec<BttvId>,
 
     /// Names of SVGs to use
     #[structopt(long = "svg")]

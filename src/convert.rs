@@ -60,6 +60,15 @@ impl Options {
             .interact()
             .unwrap()
     }
+    fn prompt_select_opt(prompt: &str, items: &[&str]) -> Option<usize> {
+        Select::with_theme(&ColorfulTheme::default())
+            .with_prompt(prompt)
+            .default(0)
+            .items(items)
+            .report(false)
+            .interact_opt()
+            .unwrap()
+    }
 
     async fn select_scale() -> Self {
         tokio::task::spawn_blocking(|| {
@@ -163,9 +172,10 @@ impl Options {
             "Change Loop-Count",
         ];
 
-        let index = tokio::task::spawn_blocking(|| Self::prompt_select("What to Change", &ITEMS))
-            .await
-            .unwrap();
+        let index =
+            tokio::task::spawn_blocking(|| Self::prompt_select_opt("What to Change", &ITEMS))
+                .await
+                .unwrap()?;
 
         match index {
             0 => Some(Self::select_quality().await),
