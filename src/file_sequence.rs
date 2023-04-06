@@ -5,9 +5,16 @@ use lazy_regex::regex_captures;
 use thiserror::Error;
 use walkdir::{DirEntry, WalkDir};
 
+#[derive(Debug, Clone)]
 pub struct SequenceElement {
     pub index: usize,
-    pub path: PathBuf,
+    pub file_name: PathBuf,
+}
+
+#[derive(Debug, Clone)]
+pub struct FileSequence {
+    pub dir: PathBuf,
+    pub files: Vec<SequenceElement>,
 }
 
 #[derive(Debug, Error)]
@@ -31,8 +38,8 @@ impl TryFrom<DirEntry> for SequenceElement {
         let index = digits
             .parse::<usize>()
             .map_err(|_| SequenceError::Parse(file_name.to_string()))?;
-        let path = value.into_path();
-        Ok(Self { index, path })
+        let file_name = PathBuf::from(value.file_name());
+        Ok(Self { index, file_name })
     }
 }
 
@@ -40,38 +47,34 @@ impl TryFrom<DirEntry> for SequenceElement {
 /// where the group `(\d+)` denotes the sequence index.
 ///
 /// E.g. `0001.png` or `002.webp`
-pub fn file_sequence_blocking<P>(path: P) -> Result<Vec<SequenceElement>>
-where
-    P: AsRef<Path>,
-{
-    let mut buffer = WalkDir::new(path.as_ref())
+pub fn file_sequence_blocking(path: impl AsRef<Path>) -> Result<FileSequence> {
+    let mut files = WalkDir::new(path.as_ref())
         .max_depth(1)
         .min_depth(1)
         .into_iter()
         .filter_map(|entry| entry.ok())
         .map(SequenceElement::try_from)
         .collect::<std::result::Result<Vec<_>, _>>()?;
+    files.sort_by_key(|e| e.index);
 
-    buffer.sort_by_key(|e| e.index);
-
-    if !buffer.is_empty() {
-        let expected_len = buffer.last().unwrap().index - buffer.first().unwrap().index + 1;
-        if buffer.len() != expected_len {
-            let path = path.as_ref().to_str().unwrap().to_string();
-            Err(SequenceError::Sequence(path).into())
-        } else {
-            Ok(buffer)
-        }
-    } else {
+    if files.is_empty() {
         let path = path.as_ref().to_str().unwrap().to_string();
         Err(SequenceError::Empty(path).into())
+    } else {
+        let expected_len = files.last().unwrap().index - files.first().unwrap().index + 1;
+        if files.len() == expected_len {
+            Ok(FileSequence {
+                dir: path.as_ref().to_owned(),
+                files,
+            })
+        } else {
+            let path = path.as_ref().to_str().unwrap().to_string();
+            Err(SequenceError::Sequence(path).into())
+        }
     }
 }
 
-pub async fn file_sequence<P>(path: P) -> Result<Vec<SequenceElement>>
-where
-    P: AsRef<Path>,
-{
+pub async fn file_sequence(path: impl AsRef<Path>) -> Result<FileSequence> {
     let path = path.as_ref().to_owned();
     tokio::task::spawn_blocking(move || file_sequence_blocking(path))
         .await

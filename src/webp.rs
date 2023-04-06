@@ -1,18 +1,15 @@
-use std::path::{Path, PathBuf};
-
 use anyhow::Result;
 use lazy_regex::{lazy_regex, regex_captures};
-use log::warn;
 use simple_error::simple_error;
 
+#[derive(Clone)]
 pub struct WebpInfo {
     pub durations: Vec<i32>,
     pub size: (i32, i32),
-    pub path: PathBuf,
 }
 
 impl WebpInfo {
-    pub fn from_stdout(stdout: &str, path: impl AsRef<Path>) -> Result<WebpInfo> {
+    pub fn from_stdout(stdout: &str) -> Result<WebpInfo> {
         let mut durations = Vec::new();
         for capture in lazy_regex!(r"^  Duration: (\d+)\r?"m).captures_iter(stdout) {
             let duration_str = capture.get(1).unwrap().as_str();
@@ -25,7 +22,6 @@ impl WebpInfo {
         Ok(Self {
             durations,
             size: (w, h),
-            path: path.as_ref().to_owned(),
         })
     }
     pub fn is_animated(&self) -> bool {
@@ -57,24 +53,11 @@ impl WebpInfo {
     pub fn height(&self) -> i32 {
         self.size.1
     }
-    pub fn path(&self) -> &Path {
-        &self.path
+    pub fn min_duration(&self) -> Option<i32> {
+        self.durations.iter().min().copied()
     }
-    pub fn is_valid(&self) -> bool {
-        // https://github.com/WhatsApp/stickers/blob/main/Android/app/src/main/java/com/example/samplestickerapp/StickerPackValidator.java#L30-L46
-        const ANIMATED_MIN_FRAME_DURATION_MS: i32 = 8;
-        const ANIMATED_MAX_TOTAL_DURATION_MS: i32 = 10_000;
-
-        let mut durations = self.durations.iter();
-        if self.total_duration() > ANIMATED_MAX_TOTAL_DURATION_MS {
-            warn!("emote `{self:?}` exceeded max duration");
-            false
-        } else if durations.any(|&d| d < ANIMATED_MIN_FRAME_DURATION_MS) {
-            warn!("emote `{self:?}` has frames that are too short");
-            false
-        } else {
-            true
-        }
+    pub fn max_duration(&self) -> Option<i32> {
+        self.durations.iter().max().copied()
     }
 }
 
@@ -87,7 +70,6 @@ impl std::fmt::Debug for WebpInfo {
             .field("all_durations_eq", &self.all_durations_eq())
             .field("unique_durations", &self.unique_durations())
             .field("size", &self.size)
-            .field("path", &self.path())
             .finish()
     }
 }

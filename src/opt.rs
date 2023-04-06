@@ -94,9 +94,14 @@ pub struct Opt {
     pub download_dir: PathBuf,
 
     /// Where to save extracted frames
-    #[structopt(long = "frames-dir", default_value = "./frames/")]
+    #[structopt(long = "raw-frames-dir", default_value = "./frames-raw/")]
     #[structopt(parse(try_from_str = parse_dir_path))]
-    pub frames_dir: PathBuf,
+    pub raw_frames_dir: PathBuf,
+
+    /// Where to save the resized frames
+    #[structopt(long = "resized-frames-dir", default_value = "./frames-resized/")]
+    #[structopt(parse(try_from_str = parse_dir_path))]
+    pub resized_frames_dir: PathBuf,
 
     /// Where to put converted static stickers
     #[structopt(long = "out-static-dir", default_value = "./out-static/")]

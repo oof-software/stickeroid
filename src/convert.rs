@@ -1,8 +1,56 @@
+use derive_builder::Builder;
 use dialoguer::theme::ColorfulTheme;
 use dialoguer::{Input, Select};
 
-use crate::binaries::{FfmpegOptions, FfmpegOptionsBuilder};
 type ValidatorResult<T> = std::result::Result<T, &'static str>;
+
+#[derive(Debug, Builder)]
+pub struct ConversionOptions {
+    #[builder(default = "(512, 512)")]
+    pub scale: (i32, i32),
+    #[builder(default = "75")]
+    pub quality: i32,
+    #[builder(default = "4")]
+    pub compression_level: i32,
+    #[builder(default = "-1")]
+    pub preset: i32,
+    #[builder(default = "30")]
+    pub delay_ms: i32,
+    #[builder(default = "50")]
+    pub fps: i32,
+    #[builder(default = "0")]
+    pub lossless: i32,
+    #[builder(default = "0")]
+    pub loop_count: i32,
+}
+
+impl ConversionOptions {
+    pub async fn from_prompt() -> ConversionOptions {
+        let mut builder = ConversionOptions::builder();
+
+        loop {
+            match Options::select().await {
+                None => break,
+                Some(opt) => opt.apply(&mut builder),
+            };
+        }
+
+        // SAFETY: Every field has a default
+        builder.build().unwrap()
+    }
+    pub fn builder() -> ConversionOptionsBuilder {
+        ConversionOptionsBuilder::default()
+    }
+    pub fn video_filter(&self) -> String {
+        format!(
+            "fps={},\
+            setpts=PTS*({}/40),\
+            scale=w={}:h={}:force_original_aspect_ratio=decrease,\
+            pad=512:512:-1:-1:color=0x00000000",
+            self.fps, self.delay_ms, self.scale.0, self.scale.1
+        )
+    }
+}
 
 pub enum Options {
     Scale(i32, i32),
@@ -149,7 +197,7 @@ impl Options {
         .unwrap()
     }
 
-    fn apply(self, opt: &mut FfmpegOptionsBuilder) {
+    fn apply(self, opt: &mut ConversionOptionsBuilder) {
         match self {
             Options::Scale(w, h) => opt.scale((w, h)),
             Options::Quality(q) => opt.quality(q),
@@ -188,18 +236,4 @@ impl Options {
             _ => unreachable!(),
         }
     }
-}
-
-pub async fn make_ffmpeg_options() -> FfmpegOptions {
-    let mut builder = FfmpegOptions::builder();
-
-    loop {
-        match Options::select().await {
-            None => break,
-            Some(opt) => opt.apply(&mut builder),
-        };
-    }
-
-    // SAFETY: Every field has a default
-    builder.build().unwrap()
 }

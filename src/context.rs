@@ -44,6 +44,22 @@ impl Context {
         ids
     }
 
+    pub fn download_path(&self, id: EmoteId) -> PathBuf {
+        self.opt.download_dir.join(id.to_file_name())
+    }
+    pub fn raw_frames_path(&self, id: EmoteId) -> PathBuf {
+        self.opt.raw_frames_dir.join(id.to_string())
+    }
+    pub fn resized_frames_path(&self, id: EmoteId) -> PathBuf {
+        self.opt.resized_frames_dir.join(id.to_string())
+    }
+    pub fn static_out_path(&self, id: EmoteId) -> PathBuf {
+        self.opt.out_static_dir.join(id.to_file_name())
+    }
+    pub fn anim_out_path(&self, id: EmoteId) -> PathBuf {
+        self.opt.out_anim_dir.join(id.to_file_name())
+    }
+
     pub async fn download_emote(&self, id: EmoteId) -> Result<()> {
         let dl = self.client.get_emote(id).await?;
         dl.write_to(&self.opt.download_dir).await?;
@@ -63,8 +79,7 @@ impl Context {
     }
 
     pub async fn webp_info(&self, id: EmoteId) -> Result<webp::WebpInfo> {
-        let path = self.opt.download_dir.join(id.to_file_name());
-        let info = self.bin.webp_info.info(&path).await?;
+        let info = self.bin.webp_info.info(self.download_path(id)).await?;
         info!("got webp_info for emote `{id:?}`");
         Ok(info)
     }
@@ -94,8 +109,8 @@ impl Context {
     }
 
     pub async fn extract_frames_single(&self, id: EmoteId) -> Result<()> {
-        let src = self.opt.download_dir.join(id.to_file_name());
-        let dst = self.opt.frames_dir.join(id.to_string());
+        let src = self.download_path(id);
+        let dst = self.raw_frames_path(id);
         crate::fs::assert_dir(&dst).await?;
         self.bin.anim_dump.dump_frames(src, dst).await?;
         info!("extracted frames for emote `{id:?}`");
@@ -117,13 +132,4 @@ impl Context {
     // https://github.com/WhatsApp/stickers/blob/main/Android/app/src/main/java/com/example/samplestickerapp/StickerPackValidator.java#L30-L46
     const STATIC_SIZE_LIMIT: usize = 100 * 1024;
     const ANIMATED_SIZE_LIMIT: usize = 500 * 1024;
-
-    pub fn partition_infos_valid(
-        infos: &mut [webp::WebpInfo],
-    ) -> (&[webp::WebpInfo], &[webp::WebpInfo]) {
-        let partition_point = infos
-            .iter_mut()
-            .partition_in_place(webp::WebpInfo::is_valid);
-        infos.split_at(partition_point)
-    }
 }
