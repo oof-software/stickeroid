@@ -66,7 +66,7 @@ impl EmoteIdExt for BttvId {
         format!("https://cdn.betterttv.net/emote/{self}/3x.webp")
     }
     fn to_file_name(&self) -> PathBuf {
-        let id = hex::encode(&self.0);
+        let id = hex::encode(self.0);
         PathBuf::from(format!("{self}.webp"))
     }
 }

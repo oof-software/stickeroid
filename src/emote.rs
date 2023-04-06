@@ -27,7 +27,7 @@ impl Emote {
     pub async fn download(ctx: &Context, id: EmoteId) -> Result<()> {
         let dl_path = ctx.download_path(id);
 
-        if let Ok(_) = tokio::fs::metadata(&dl_path).await {
+        if tokio::fs::metadata(&dl_path).await.is_ok() {
             warn!("emote `{id:?}` was already downloaded");
             return Ok(());
         }
@@ -49,7 +49,7 @@ impl Emote {
         let dst = ctx.raw_frames_path(id);
         crate::fs::assert_dir(&dst).await?;
 
-        if let Some(_) = tokio::fs::read_dir(&dst).await?.next_entry().await? {
+        if !crate::fs::is_dir_empty(&dst).await? {
             warn!("frames for emote `{id:?}` are already extracted");
         } else {
             let src = ctx.download_path(id);
@@ -64,7 +64,7 @@ impl Emote {
         let dst = ctx.resized_frames_path(id);
         crate::fs::assert_dir(&dst).await?;
 
-        if let Some(_) = tokio::fs::read_dir(&dst).await?.next_entry().await? {
+        if !crate::fs::is_dir_empty(&dst).await? {
             warn!("frames for emote `{id:?}` are already resized");
         } else {
             let src = ctx.raw_frames_path(id).join("%04d.png");
@@ -85,7 +85,6 @@ impl Emote {
         Ok(())
     }
     async fn to_sticker_anim(&self, ctx: &Context, opt: &ConversionOptions) -> Result<()> {
-        let input = ctx.resized_frames_path(self.id);
         let output = ctx.anim_out_path(self.id);
 
         let frames = {
@@ -99,15 +98,15 @@ impl Emote {
                 frames.push(Img2WebpFrame::new(
                     path,
                     duration,
-                    opt.compression_level,
                     opt.quality,
+                    opt.compression_level,
                 ))
             }
             frames
         };
         ctx.bin
             .img_2_webp
-            .webp_from_images(opt, input, output, &frames)
+            .webp_from_images(opt, output, &frames)
             .await?;
         info!("converted emote `{:?}` to animated sticker", self.id);
         Ok(())

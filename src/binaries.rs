@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
-use std::process::Output;
 use std::str::FromStr;
 
 use anyhow::Result;
@@ -23,11 +22,25 @@ impl ArgExt for Command {
     }
 }
 
-fn check_output(out: Output) -> Result<()> {
-    if !out.status.success() {
-        let stderr = std::str::from_utf8(&out.stderr).unwrap();
-        error!("process fucked up: {stderr}");
-        Err(simple_error!("process fucked up").into())
+async fn run_command(mut cmd: Command) -> Result<()> {
+    let program = cmd.as_std().get_program().to_str().unwrap().to_string();
+    let args = cmd
+        .as_std()
+        .get_args()
+        .fold(program.clone(), |mut acc, next| {
+            acc.push(' ');
+            acc.push_str(next.to_str().unwrap());
+            acc
+        });
+
+    let output = cmd.output().await?;
+
+    if !output.status.success() {
+        let stderr = std::str::from_utf8(&output.stderr).unwrap();
+        error!("process `{program}` fucked up");
+        error!("args: `{args}`");
+        error!("stderr: `{stderr}`");
+        Err(simple_error!("process `{program}` fucked up").into())
     } else {
         Ok(())
     }
@@ -75,15 +88,11 @@ impl AnimDump {
         &self.0
     }
     pub async fn dump_frames(&self, webp: impl AsRef<Path>, dst: impl AsRef<Path>) -> Result<()> {
-        let out = Command::new(&self.0)
-            .arg_pair("-prefix", "")
+        let mut cmd = Command::new(&self.0);
+        cmd.arg_pair("-prefix", "")
             .arg_pair("-folder", dst.as_ref())
-            .arg(webp.as_ref())
-            .output()
-            .await?;
-        check_output(out)?;
-
-        Ok(())
+            .arg(webp.as_ref());
+        run_command(cmd).await
     }
 }
 
@@ -106,16 +115,12 @@ impl Ffmpeg {
             scale=w=512:h=512:force_original_aspect_ratio=decrease,\
             pad=512:512:-1:-1:color=0x00000000";
 
-        let out = Command::new(&self.0)
-            .arg_pair("-i", input.as_ref())
+        let mut cmd = Command::new(&self.0);
+        cmd.arg_pair("-i", input.as_ref())
             .arg_pair("-vf", VIDEO_FILTER)
             .arg("-y")
-            .arg(output.as_ref())
-            .output()
-            .await?;
-        check_output(out)?;
-
-        Ok(())
+            .arg(output.as_ref());
+        run_command(cmd).await
     }
     pub async fn webp_from_images(
         &self,
@@ -127,8 +132,8 @@ impl Ffmpeg {
             warn!("fps too high for given delay");
         }
 
-        let out = Command::new(&self.0)
-            .arg_pair("-i", input.as_ref())
+        let mut cmd = Command::new(&self.0);
+        cmd.arg_pair("-i", input.as_ref())
             .arg_pair("-pix_fmt", "yuva420p")
             .arg_pair("-compression_level", format!("{}", opt.compression_level))
             .arg_pair("-preset", format!("{}", opt.preset))
@@ -139,32 +144,28 @@ impl Ffmpeg {
             .arg_pair("-fps_mode", "vfr")
             .arg("-an")
             .arg("-y")
-            .arg(output.as_ref())
-            .output()
-            .await?;
-        check_output(out)?;
-
-        Ok(())
+            .arg(output.as_ref());
+        run_command(cmd).await
     }
 }
 
 pub struct Img2WebpFrame {
-    pub file_name: PathBuf,
+    pub path: PathBuf,
     pub duration: i32,
-    pub compression_factor: i32,
+    pub compression_quality: i32,
     pub compression_method: i32,
 }
 impl Img2WebpFrame {
     pub fn new(
-        file_name: impl AsRef<Path>,
+        path: impl AsRef<Path>,
         duration: i32,
-        compression_factor: i32,
+        compression_quality: i32,
         compression_method: i32,
     ) -> Img2WebpFrame {
         Img2WebpFrame {
-            file_name: file_name.as_ref().to_path_buf(),
+            path: path.as_ref().to_path_buf(),
             duration,
-            compression_factor,
+            compression_quality,
             compression_method,
         }
     }
@@ -184,7 +185,6 @@ impl Img2Webp {
     pub async fn webp_from_images(
         &self,
         opt: &ConversionOptions,
-        input: impl AsRef<Path>,
         output: impl AsRef<Path>,
         frames: &[Img2WebpFrame],
     ) -> Result<()> {
@@ -194,15 +194,12 @@ impl Img2Webp {
 
         for frame_opt in frames {
             cmd.arg_pair("-d", frame_opt.duration.to_string())
-                .arg_pair("-q", frame_opt.compression_factor.to_string())
+                .arg_pair("-q", frame_opt.compression_quality.to_string())
                 .arg_pair("-m", frame_opt.compression_method.to_string())
-                .arg(input.as_ref().join(&frame_opt.file_name));
+                .arg(&frame_opt.path);
         }
 
-        let out = cmd.output().await?;
-        check_output(out)?;
-
-        Ok(())
+        run_command(cmd).await
     }
 }
 
@@ -231,10 +228,8 @@ impl Magick {
         if lossless {
             cmd.arg_pair("-define", "webp:lossless=true");
         }
-        let out = cmd.arg(output.as_ref()).output().await?;
-        check_output(out)?;
-
-        Ok(())
+        cmd.arg(output.as_ref());
+        run_command(cmd).await
     }
 }
 
@@ -249,11 +244,9 @@ impl VWebp {
         &self.0
     }
     pub async fn view_webp(&self, input: impl AsRef<OsStr>) -> Result<()> {
-        Ok(Command::new(&self.0)
-            .arg(input.as_ref())
-            .output()
-            .await
-            .map(|_| ())?)
+        let mut cmd = Command::new(&self.0);
+        cmd.arg(input.as_ref());
+        run_command(cmd).await
     }
 }
 
