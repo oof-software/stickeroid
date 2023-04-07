@@ -5,7 +5,6 @@ use simple_error::simple_error;
 
 use crate::binaries::Img2WebpFrame;
 use crate::context::Context;
-use crate::convert::ConversionOptions;
 use crate::emote_ext::EmoteId;
 use crate::file_sequence::FileSequence;
 use crate::webp::WebpInfo;
@@ -84,48 +83,87 @@ impl Emote {
         info!("converted emote `{:?}` to static sticker", self.id);
         Ok(())
     }
-    async fn to_sticker_anim(&self, ctx: &Context, opt: &ConversionOptions) -> Result<()> {
-        let output = ctx.anim_out_path(self.id);
+    async fn to_sticker_anim(&self, ctx: &Context) -> Result<()> {
+        #[derive(Debug, Clone, Copy)]
+        struct Preset {
+            pub quality: i32,
+            pub level: i32,
+        }
+        impl Preset {
+            pub const fn new(quality: i32, level: i32) -> Preset {
+                Preset { quality, level }
+            }
+        }
 
-        let frames = {
-            let base_dir = self.resized_frames.dir.as_path();
-            let mut frames = Vec::with_capacity(self.resized_frames.files.len());
+        // https://github.com/WhatsApp/stickers/blob/main/Android/app/src/main/java/com/example/samplestickerapp/StickerPackValidator.java#L30-L46
+        const STATIC_SIZE_LIMIT: u64 = 100 * 1024;
+        const ANIMATED_SIZE_LIMIT: u64 = 500 * 1024;
 
-            let resized = self.resized_frames.files.iter();
-            let durations = self.info.durations.iter();
-            for (frame, &duration) in resized.zip(durations) {
+        const QUALITY_PRESETS: [Preset; 5] = [
+            Preset::new(75, 4),
+            Preset::new(50, 4),
+            Preset::new(25, 4),
+            Preset::new(10, 4),
+            Preset::new(10, 6),
+        ];
+
+        fn make_frames(resized_frames: &FileSequence, durations: &[i32]) -> Vec<Img2WebpFrame> {
+            let base_dir = resized_frames.dir.as_path();
+            let mut frames = Vec::with_capacity(resized_frames.files.len());
+            let resized = resized_frames.files.iter();
+            for (frame, &duration) in resized.zip(durations.iter()) {
                 let path = base_dir.join(&frame.file_name);
-                frames.push(Img2WebpFrame::new(
-                    path,
-                    duration,
-                    opt.quality,
-                    opt.compression_level,
-                ))
+                frames.push(Img2WebpFrame::new(path, duration, 0, 0))
             }
             frames
-        };
-        ctx.bin
-            .img_2_webp
-            .webp_from_images(opt, output, &frames)
-            .await?;
-        info!("converted emote `{:?}` to animated sticker", self.id);
+        }
+        fn alter_frames(frames: &mut [Img2WebpFrame], preset: Preset) {
+            frames.iter_mut().for_each(|frame| {
+                frame.compression_quality = preset.quality;
+                frame.compression_method = preset.level;
+            });
+        }
+
+        let output = ctx.anim_out_path(self.id);
+        let mut frames = make_frames(&self.resized_frames, &self.info.durations);
+
+        let mut success = false;
+        for preset in QUALITY_PRESETS {
+            alter_frames(&mut frames, preset);
+
+            ctx.bin
+                .img_2_webp
+                .webp_from_images(&output, &frames)
+                .await?;
+
+            if crate::fs::file_size(&output).await? > ANIMATED_SIZE_LIMIT {
+                warn!("emote `{:?}` too large with {:?}", self.id, preset);
+            } else {
+                info!(
+                    "converted emote `{:?}` to animated sticker with {:?}",
+                    self.id, preset
+                );
+                success = true;
+                break;
+            }
+        }
+
+        if !success {
+            warn!("emote `{:?}` too large with every preset", self.id);
+        }
+
         Ok(())
     }
-    pub async fn to_sticker(&self, ctx: &Context, opt: &ConversionOptions) -> Result<()> {
+    pub async fn to_sticker(&self, ctx: &Context) -> Result<()> {
         if self.info.is_animated() {
-            self.to_sticker_anim(ctx, opt).await
+            self.to_sticker_anim(ctx).await
         } else {
             self.to_sticker_static(ctx).await
         }
     }
-    pub async fn to_sticker_batch(
-        ctx: &Context,
-        opt: &ConversionOptions,
-        emotes: &[Emote],
-        par: usize,
-    ) -> Result<()> {
+    pub async fn to_sticker_batch(ctx: &Context, emotes: &[Emote], par: usize) -> Result<()> {
         let mut iter = futures::stream::iter(emotes)
-            .map(|emote| emote.to_sticker(ctx, opt))
+            .map(|emote| emote.to_sticker(ctx))
             .buffer_unordered(par);
         while let Some(result) = iter.next().await {
             if let err @ Err(_) = result {

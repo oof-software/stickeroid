@@ -18,7 +18,6 @@ use crate::context::Context;
 use crate::emote::Emote;
 
 use anyhow::Result;
-use convert::ConversionOptions;
 use log::warn;
 
 async fn main_() -> Result<()> {
@@ -42,8 +41,7 @@ async fn main_() -> Result<()> {
         })
         .collect::<Vec<_>>();
 
-    let opt = ConversionOptions::from_prompt().await;
-    Emote::to_sticker_batch(&ctx, &opt, &processed, 5).await?;
+    Emote::to_sticker_batch(&ctx, &processed, 14).await?;
 
     Ok(())
 }

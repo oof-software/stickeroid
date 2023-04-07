@@ -28,11 +28,15 @@ impl ConversionOptions {
     pub async fn from_prompt() -> ConversionOptions {
         let mut builder = ConversionOptions::builder();
 
-        loop {
-            match Options::select().await {
-                None => break,
-                Some(opt) => opt.apply(&mut builder),
-            };
+        if cfg!(debug_assertions) {
+            builder.compression_level(6).quality(25).lossless(0);
+        } else {
+            loop {
+                match Options::select().await {
+                    None => break,
+                    Some(opt) => opt.apply(&mut builder),
+                };
+            }
         }
 
         // SAFETY: Every field has a default

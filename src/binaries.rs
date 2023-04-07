@@ -184,16 +184,17 @@ impl Img2Webp {
 
     pub async fn webp_from_images(
         &self,
-        opt: &ConversionOptions,
         output: impl AsRef<Path>,
         frames: &[Img2WebpFrame],
     ) -> Result<()> {
         let mut cmd = Command::new(&self.0);
         cmd.arg_pair("-o", output.as_ref())
-            .arg_pair("-loop", opt.loop_count.to_string());
+            .arg_pair("-loop", "0")
+            .arg("-min_size");
 
         for frame_opt in frames {
             cmd.arg_pair("-d", frame_opt.duration.to_string())
+                .arg("-lossy")
                 .arg_pair("-q", frame_opt.compression_quality.to_string())
                 .arg_pair("-m", frame_opt.compression_method.to_string())
                 .arg(&frame_opt.path);

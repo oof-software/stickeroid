@@ -128,8 +128,4 @@ impl Context {
         }
         Ok(())
     }
-
-    // https://github.com/WhatsApp/stickers/blob/main/Android/app/src/main/java/com/example/samplestickerapp/StickerPackValidator.java#L30-L46
-    const STATIC_SIZE_LIMIT: usize = 100 * 1024;
-    const ANIMATED_SIZE_LIMIT: usize = 500 * 1024;
 }
